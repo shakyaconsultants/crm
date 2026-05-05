@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Navigation from '@/components/Navigation'
 import AdminDateRangeFilter from '@/components/AdminDateRangeFilter'
 import { format, subDays } from 'date-fns'
@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { useRestrictCopy } from '@/hooks/useRestrictCopy'
 import { CASE_STATUSES, parseCaseChecklist, type CaseChecklist } from '@/lib/lead-workflow'
+import { parseEmployeeIntakeForm } from '@/lib/employee-intake-form'
+import { INTAKE_DISPLAY_SECTIONS, intakeFieldLabel, intakeValueToText } from '@/lib/employee-intake-display'
 
 type Lead = {
   id: string
@@ -28,6 +30,8 @@ type Lead = {
   preSipAt: string | null
   assignedTo: { name: string } | null
   assignedAdvisor: { name: string } | null
+  remarks: string | null
+  employeeIntakeForm?: unknown
   _count?: { documents: number }
 }
 
@@ -265,6 +269,11 @@ export default function CaseAssessorPage() {
     ? [leadForDocuments.firstName, leadForDocuments.lastName].filter(Boolean).join(' ') ||
       leadForDocuments.phone
     : ''
+  const checklistLead = checklistLeadId ? leads.find((l) => l.id === checklistLeadId) : null
+  const checklistLeadIntake = useMemo(
+    () => parseEmployeeIntakeForm(checklistLead?.employeeIntakeForm ?? null),
+    [checklistLead?.employeeIntakeForm]
+  )
 
   return (
     <div
@@ -398,6 +407,34 @@ export default function CaseAssessorPage() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-bold text-white">Case completion checklist</h3>
                   <button type="button" onClick={closeChecklistModal} className="text-neutral-400 hover:text-white">Close</button>
+                </div>
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 mb-4">
+                  <p className="text-xs text-cyan-200 font-semibold tracking-wide uppercase mb-3">
+                    Full Intake Form
+                  </p>
+                  <div className="max-h-[36vh] overflow-y-auto pr-1 space-y-3">
+                    {INTAKE_DISPLAY_SECTIONS.map((section) => (
+                      <div key={section.title} className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
+                        <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-2">
+                          {section.title}
+                        </p>
+                        <div className="space-y-2">
+                          {section.fields.map((field) => (
+                            <div key={String(field)} className="text-sm leading-6 text-neutral-200">
+                              <span className="font-bold text-neutral-100">{intakeFieldLabel(String(field))}: </span>
+                              <span className="whitespace-pre-wrap">{intakeValueToText((checklistLeadIntake as Record<string, unknown>)[String(field)])}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-1">Advisor Notes</p>
+                    <p className="text-sm leading-6 text-neutral-200 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                      {checklistLead?.remarks?.trim() || '—'}
+                    </p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div>

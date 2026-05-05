@@ -18,6 +18,8 @@ import {
   X,
 } from 'lucide-react'
 import { useRestrictCopy } from '@/hooks/useRestrictCopy'
+import { parseEmployeeIntakeForm } from '@/lib/employee-intake-form'
+import { INTAKE_DISPLAY_SECTIONS, intakeFieldLabel, intakeValueToText } from '@/lib/employee-intake-display'
 
 type CaseAssessorOption = { id: string; name: string }
 
@@ -28,6 +30,7 @@ type Lead = {
   phone: string
   assignedTo: { name: string } | null
   remarks: string | null
+  employeeIntakeForm?: unknown
   closedSale: boolean
   verifiedSale: boolean
   assignedCaseAssessorId: string | null
@@ -103,31 +106,6 @@ export default function AdminAdvisorPage() {
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const notify = () => {
-      const now = Date.now()
-      leads.forEach((lead) => {
-        if (!lead.preSipAt) return
-        const sipTs = new Date(lead.preSipAt).getTime()
-        const reminderAt = sipTs - 30 * 60 * 1000
-        if (now < reminderAt || now > sipTs + 20 * 60 * 1000) return
-        const key = `presip-reminded:${lead.id}:${lead.preSipAt}`
-        if (localStorage.getItem(key)) return
-        localStorage.setItem(key, '1')
-        if (Notification.permission === 'granted') {
-          new Notification('Pre-SIP reminder (30 min)', {
-            body: `${lead.firstName || ''} ${lead.lastName || ''} · ${lead.phone}`.trim(),
-          })
-        }
-      })
-    }
-    if (Notification.permission === 'default') void Notification.requestPermission()
-    notify()
-    const id = setInterval(notify, 60 * 1000)
-    return () => clearInterval(id)
-  }, [leads])
-
-  useEffect(() => {
     const timer = setTimeout(() => {
       setSearchTerm(displaySearchTerm)
       setCurrentPage(1)
@@ -176,6 +154,13 @@ export default function AdminAdvisorPage() {
     const lead = leads.find((l) => l.id === id)
     if (lead) updateLead(id, { remarks: lead.remarks }, true)
   }
+
+  const expandedLead = expandedId ? leads.find((l) => l.id === expandedId) : null
+  const expandedLeadRemarks = expandedLead?.remarks || ''
+  const expandedLeadIntake = useMemo(
+    () => parseEmployeeIntakeForm(expandedLead?.employeeIntakeForm ?? null),
+    [expandedLead?.employeeIntakeForm]
+  )
 
   const refreshLeads = async () => {
     const leadsRes = await fetch('/api/advisor/leads')
@@ -353,22 +338,20 @@ export default function AdminAdvisorPage() {
                   <th className="p-4 font-medium text-center">Remark</th>
                   <th className="p-4 font-medium text-center">Documents</th>
                   <th className="p-4 font-medium text-center">Drop</th>
-                  <th className="p-4 font-medium text-center">Verified</th>
-                  <th className="p-4 font-medium">Pre-SIP</th>
                   <th className="p-4 font-medium min-w-[180px]">Assign case assessor</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/50">
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-neutral-500">
+                    <td colSpan={9} className="p-8 text-center text-neutral-500">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                       Loading escalations...
                     </td>
                   </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-neutral-500">
+                    <td colSpan={9} className="p-8 text-center text-neutral-500">
                       No leads found.
                     </td>
                   </tr>
@@ -435,28 +418,6 @@ export default function AdminAdvisorPage() {
                           onChange={(e) => updateLead(lead.id, { closedSale: e.target.checked }, true)}
                           className="rounded border-neutral-700 bg-neutral-800 text-emerald-500 focus:ring-emerald-500/50 w-4 h-4"
                           aria-label="Drop"
-                        />
-                      </td>
-                      <td className="p-4 min-w-[190px]">
-                        <input
-                          type="datetime-local"
-                          value={lead.preSipAt ? lead.preSipAt.slice(0, 16) : ''}
-                          onChange={(e) =>
-                            updateLead(
-                              lead.id,
-                              { preSipAt: e.target.value ? new Date(e.target.value).toISOString() : null },
-                              true
-                            )
-                          }
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                      </td>
-                      <td className="p-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={lead.verifiedSale}
-                          onChange={(e) => updateLead(lead.id, { verifiedSale: e.target.checked }, true)}
-                          className="rounded border-neutral-700 bg-neutral-800 text-blue-500 focus:ring-blue-500/50 w-4 h-4"
                         />
                       </td>
                       <td className="p-4 min-w-[180px]">
@@ -527,7 +488,7 @@ export default function AdminAdvisorPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6"
+                className="w-full max-w-5xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-6"
               >
                 <div className="flex justify-between items-start mb-4">
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -542,12 +503,40 @@ export default function AdminAdvisorPage() {
                   </button>
                 </div>
 
-                <textarea
-                  value={leads.find((l) => l.id === expandedId)?.remarks || ''}
-                  onChange={(e) => updateLead(expandedId, { remarks: e.target.value })}
-                  placeholder="Append advisor-level notes or instructions here. Both you and the employee can read this log."
-                  className="w-full bg-neutral-950 p-4 rounded-xl border border-neutral-800 text-neutral-300 text-sm whitespace-pre-wrap min-h-[160px] focus:ring-2 focus:ring-amber-500/50 outline-none resize-none transition-all placeholder:text-neutral-700 select-text"
-                />
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 mb-3">
+                  <p className="text-xs text-blue-200 font-semibold tracking-wide uppercase mb-3">
+                    Full Intake Form (Read Only)
+                  </p>
+                  <div className="max-h-[42vh] overflow-y-auto pr-1 space-y-3">
+                    {INTAKE_DISPLAY_SECTIONS.map((section) => (
+                      <div key={section.title} className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
+                        <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-2">
+                          {section.title}
+                        </p>
+                        <div className="space-y-2">
+                          {section.fields.map((field) => (
+                            <div key={String(field)} className="text-sm leading-6 text-neutral-200">
+                              <span className="font-bold text-neutral-100">{intakeFieldLabel(String(field))}: </span>
+                              <span className="whitespace-pre-wrap">{intakeValueToText((expandedLeadIntake as Record<string, unknown>)[String(field)])}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+                  <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-2">
+                    Advisor Notes (Editable)
+                  </p>
+                  <textarea
+                    value={expandedLeadRemarks}
+                    onChange={(e) => updateLead(expandedId, { remarks: e.target.value })}
+                    placeholder="Write notes in paragraphs. Add follow-up actions and context for the case assessor."
+                    className="w-full bg-neutral-950 p-4 rounded-xl border border-neutral-800 text-neutral-100 text-sm leading-6 whitespace-pre-wrap min-h-[220px] max-h-[35vh] focus:ring-2 focus:ring-amber-500/50 outline-none resize-y transition-all placeholder:text-neutral-600 select-text overflow-y-auto"
+                  />
+                </div>
                 <div className="flex justify-between items-center mt-3">
                   <span className="text-[10px] text-neutral-500 italic">Auto-sync active (1s delay)</span>
                   <button
