@@ -1,4 +1,4 @@
-export type AddressHistoryRow = {
+﻿export type AddressHistoryRow = {
   fullAddress: string
   postCode: string
   type: 'CURRENT' | 'PREVIOUS'
@@ -6,19 +6,58 @@ export type AddressHistoryRow = {
 }
 
 export type ChildRow = { name: string; dob: string }
+export type NameAmountRow = { name: string; amount: string }
+export const PRESET_EXPENSE_NAMES = [
+  'Rent',
+  'Council tax',
+  'Water',
+  'Electric',
+  'Gas',
+  'Fooding',
+  'Broadband',
+  'Public Transport',
+  'Clothing & shopping',
+] as const
+
+export const DEBT_CREDITOR_TYPES = [
+  'Credit Card',
+  'Personal Loan',
+  'Catalogue',
+  'Council Tax',
+  'Utility',
+  'Overdraft',
+  'Other',
+] as const
+
+export const UK_BANK_OPTIONS = [
+  'HSBC',
+  'Barclays',
+  'Lloyds',
+  'NatWest',
+  'Santander',
+  'Halifax',
+  'Nationwide',
+  'Monzo',
+  'Starling',
+  'Revolut',
+  'TSB',
+  'Metro Bank',
+] as const
+
 export type IncomeRow = {
   source: string
   amount: string
   frequency: 'MONTHLY' | 'WEEKLY' | ''
   dateReceived: string
 }
+
 export type DebtRow = {
+  creditorType: (typeof DEBT_CREDITOR_TYPES)[number] | ''
   creditorName: string
-  accountCount: string
-  balance: string
-  percentageOfTotal: string
-  status: 'DEFAULT' | 'ACTIVE' | 'COLLECTION' | ''
+  amount: string
+  payment: string
 }
+
 export type CcjRow = {
   caseNumber: string
   courtName: string
@@ -29,6 +68,7 @@ export type CcjRow = {
   originalCreditorReferenceNumber: string
   solicitorName: string
 }
+
 export type FamilyTransferRow = {
   name: string
   relationship: string
@@ -38,32 +78,40 @@ export type FamilyTransferRow = {
 }
 
 export type EmployeeIntakeForm = {
+  fullName: string
+  callingNumber: string
+  whatsappSameAsCalling: boolean
+  whatsappNumber: string
+  emailAddress: string
   dateOfBirth: string
   maritalStatus: 'SINGLE' | 'MARRIED' | 'PARTNER' | ''
   niNumber: string
-  secondaryNumber: string
-  emailAddress: string
   addressHistory: AddressHistoryRow[]
   livingSituation: 'ALONE' | 'PARTNER' | 'PARENTS' | 'SHARED' | ''
+  children: ChildRow[]
+  rentArrears: string
+  incomeAmount: string
+  housingStatus: 'HOMEOWNER' | 'TENANT' | ''
+  employmentStatus: 'FT' | 'PT' | 'PENSIONER' | 'NOT_WORKING' | ''
+  benefits: NameAmountRow[]
+  expensesPreset: NameAmountRow[]
+  expensesExtra: NameAmountRow[]
+  bankNames: string
+  debts: DebtRow[]
+  totalDebtAmount: string
+  numberOfCreditors: string
   partnerName: string
   partnerDob: string
   dependentsCount: string
-  children: ChildRow[]
-  employmentStatus: 'FT' | 'PT' | 'SELF_EMPLOYED' | 'UNEMPLOYED' | ''
   employerName: string
   jobTitle: string
   payslipAvailable: boolean
   incomes: IncomeRow[]
-  bankNames: string
   accountType: 'CURRENT' | 'SAVINGS' | ''
   statementsAvailable: boolean
-  totalDebtAmount: string
-  numberOfCreditors: string
-  debts: DebtRow[]
   ccjs: CcjRow[]
   councilTaxAmount: string
   councilName: string
-  rentArrears: string
   utilitiesDebt: string
   waterDebt: string
   hmrcDebt: string
@@ -74,6 +122,7 @@ export type EmployeeIntakeForm = {
   transactionFlags: string
   familyTransfers: FamilyTransferRow[]
   hasCar: boolean
+  carName: string
   carRegistrationNumber: string
   propertyOwnership: string
   savingsInvestments: string
@@ -130,14 +179,22 @@ function parseIncomeRow(row: unknown): IncomeRow {
 
 function parseDebtRow(row: unknown): DebtRow {
   const o = row && typeof row === 'object' ? (row as Record<string, unknown>) : {}
-  const status =
-    o.status === 'DEFAULT' || o.status === 'ACTIVE' || o.status === 'COLLECTION' ? o.status : ''
+  const creditorType =
+    typeof o.creditorType === 'string' &&
+    DEBT_CREDITOR_TYPES.includes(o.creditorType as (typeof DEBT_CREDITOR_TYPES)[number])
+      ? (o.creditorType as (typeof DEBT_CREDITOR_TYPES)[number])
+      : ''
+
   return {
+    creditorType,
     creditorName: typeof o.creditorName === 'string' ? o.creditorName : '',
-    accountCount: typeof o.accountCount === 'string' ? o.accountCount : '',
-    balance: typeof o.balance === 'string' ? o.balance : '',
-    percentageOfTotal: typeof o.percentageOfTotal === 'string' ? o.percentageOfTotal : '',
-    status,
+    amount: typeof o.amount === 'string' ? o.amount : typeof o.balance === 'string' ? o.balance : '',
+    payment:
+      typeof o.payment === 'string'
+        ? o.payment
+        : typeof o.accountCount === 'string'
+          ? o.accountCount
+          : '',
   }
 }
 
@@ -167,30 +224,47 @@ function parseFamilyTransferRow(row: unknown): FamilyTransferRow {
   }
 }
 
+function parseNameAmountRow(row: unknown): NameAmountRow {
+  const o = row && typeof row === 'object' ? (row as Record<string, unknown>) : {}
+  return {
+    name: typeof o.name === 'string' ? o.name : '',
+    amount: typeof o.amount === 'string' ? o.amount : '',
+  }
+}
+
 export function emptyEmployeeIntakeForm(): EmployeeIntakeForm {
   return {
+    fullName: '',
+    callingNumber: '',
+    whatsappSameAsCalling: true,
+    whatsappNumber: '',
+    emailAddress: '',
     dateOfBirth: '',
     maritalStatus: '',
     niNumber: '',
-    secondaryNumber: '',
-    emailAddress: '',
     addressHistory: [{ fullAddress: '', postCode: '', type: 'CURRENT', durationMonths: 60 }],
     livingSituation: '',
+    children: [{ name: '', dob: '' }],
+    rentArrears: '',
+    incomeAmount: '',
+    housingStatus: '',
+    employmentStatus: '',
+    benefits: [{ name: '', amount: '' }],
+    expensesPreset: PRESET_EXPENSE_NAMES.map((name) => ({ name, amount: '' })),
+    expensesExtra: [{ name: '', amount: '' }],
+    bankNames: '',
+    debts: [{ creditorType: '', creditorName: '', amount: '', payment: '' }],
+    totalDebtAmount: '',
+    numberOfCreditors: '',
     partnerName: '',
     partnerDob: '',
     dependentsCount: '',
-    children: [{ name: '', dob: '' }],
-    employmentStatus: '',
     employerName: '',
     jobTitle: '',
     payslipAvailable: false,
     incomes: [{ source: '', amount: '', frequency: '', dateReceived: '' }],
-    bankNames: '',
     accountType: '',
     statementsAvailable: false,
-    totalDebtAmount: '',
-    numberOfCreditors: '',
-    debts: [{ creditorName: '', accountCount: '', balance: '', percentageOfTotal: '', status: '' }],
     ccjs: [
       {
         caseNumber: '',
@@ -205,7 +279,6 @@ export function emptyEmployeeIntakeForm(): EmployeeIntakeForm {
     ],
     councilTaxAmount: '',
     councilName: '',
-    rentArrears: '',
     utilitiesDebt: '',
     waterDebt: '',
     hmrcDebt: '',
@@ -216,6 +289,7 @@ export function emptyEmployeeIntakeForm(): EmployeeIntakeForm {
     transactionFlags: '',
     familyTransfers: [{ name: '', relationship: '', amountSent: '', amountReceived: '', frequency: '' }],
     hasCar: false,
+    carName: '',
     carRegistrationNumber: '',
     propertyOwnership: '',
     savingsInvestments: '',
@@ -246,28 +320,21 @@ export function addressHistoryMeetsFiveYears(f: EmployeeIntakeForm): boolean {
 export function employeeIntakeFormToRemarks(f: EmployeeIntakeForm): string {
   const lines = [
     '[Employee intake]',
-    `DOB: ${f.dateOfBirth || '—'}`,
-    `Marital status: ${f.maritalStatus || '—'}`,
-    `Secondary number: ${f.secondaryNumber || '—'}`,
+    `Name: ${f.fullName || '—'}`,
+    `Calling number: ${f.callingNumber || '—'}`,
+    `WhatsApp: ${f.whatsappSameAsCalling ? 'Same as calling' : f.whatsappNumber || '—'}`,
     `Email: ${f.emailAddress || '—'}`,
+    `DOB: ${f.dateOfBirth || '—'}`,
     `Address history months: ${addressHistoryTotalMonths(f)}`,
+    `Income amount: ${f.incomeAmount || '—'}`,
+    `Housing: ${f.housingStatus || '—'}`,
     `Employment status: ${f.employmentStatus || '—'}`,
     `Total debt amount: ${f.totalDebtAmount || '—'}`,
     `Creditors: ${f.numberOfCreditors || '—'}`,
-    `Council debt: ${f.councilTaxAmount || '—'} (${f.councilName || '—'})`,
-    `Car: ${f.hasCar ? `Yes (${f.carRegistrationNumber || 'reg missing'})` : 'No'}`,
-    `Docs (ID/Payslip/Bank/Benefit/Council/Credit): ${[
-      f.idProofProvided,
-      f.payslipsProvided,
-      f.bankStatementsProvided,
-      f.benefitStatementsProvided,
-      f.councilTaxStatementProvided,
-      f.creditReportsProvided,
-    ]
-      .map((x) => (x ? 'Y' : 'N'))
-      .join('/')}`,
+    `Living: ${f.livingSituation || '—'}`,
+    `Car: ${f.hasCar ? `Yes (${f.carName || '—'} / ${f.carRegistrationNumber || '—'})` : 'No'}`,
+    `Bank(s): ${f.bankNames || '—'}`,
     `Internal notes: ${f.internalNotes || '—'}`,
-    `Affordability summary: ${f.affordabilitySummary || '—'}`,
   ]
   return lines.join('\n')
 }
@@ -291,24 +358,26 @@ export function parseEmployeeIntakeForm(input: unknown): EmployeeIntakeForm {
   const employmentStatus =
     o.employmentStatus === 'FT' ||
     o.employmentStatus === 'PT' ||
-    o.employmentStatus === 'SELF_EMPLOYED' ||
-    o.employmentStatus === 'UNEMPLOYED'
+    o.employmentStatus === 'PENSIONER' ||
+    o.employmentStatus === 'NOT_WORKING'
       ? o.employmentStatus
       : ''
+  const housingStatus =
+    o.housingStatus === 'HOMEOWNER' || o.housingStatus === 'TENANT' ? o.housingStatus : ''
   const accountType = o.accountType === 'CURRENT' || o.accountType === 'SAVINGS' ? o.accountType : ''
 
   return {
     ...base,
+    fullName: typeof o.fullName === 'string' ? o.fullName : '',
+    callingNumber: typeof o.callingNumber === 'string' ? o.callingNumber : '',
+    whatsappSameAsCalling: o.whatsappSameAsCalling !== false,
+    whatsappNumber: typeof o.whatsappNumber === 'string' ? o.whatsappNumber : '',
+    emailAddress: typeof o.emailAddress === 'string' ? o.emailAddress : '',
     dateOfBirth: typeof o.dateOfBirth === 'string' ? o.dateOfBirth : '',
     maritalStatus,
     niNumber: typeof o.niNumber === 'string' ? o.niNumber : '',
-    secondaryNumber: typeof o.secondaryNumber === 'string' ? o.secondaryNumber : '',
-    emailAddress: typeof o.emailAddress === 'string' ? o.emailAddress : '',
     addressHistory: parseArray(o.addressHistory, parseAddressRow, base.addressHistory),
     livingSituation,
-    partnerName: typeof o.partnerName === 'string' ? o.partnerName : '',
-    partnerDob: typeof o.partnerDob === 'string' ? o.partnerDob : '',
-    dependentsCount: typeof o.dependentsCount === 'string' ? o.dependentsCount : '',
     children: parseArray(
       o.children,
       (row) => {
@@ -320,21 +389,29 @@ export function parseEmployeeIntakeForm(input: unknown): EmployeeIntakeForm {
       },
       base.children
     ),
+    rentArrears: typeof o.rentArrears === 'string' ? o.rentArrears : '',
+    incomeAmount: typeof o.incomeAmount === 'string' ? o.incomeAmount : '',
+    housingStatus,
     employmentStatus,
+    benefits: parseArray(o.benefits, parseNameAmountRow, base.benefits),
+    expensesPreset: parseArray(o.expensesPreset, parseNameAmountRow, base.expensesPreset),
+    expensesExtra: parseArray(o.expensesExtra, parseNameAmountRow, base.expensesExtra),
+    bankNames: typeof o.bankNames === 'string' ? o.bankNames : '',
+    debts: parseArray(o.debts, parseDebtRow, base.debts),
+    totalDebtAmount: typeof o.totalDebtAmount === 'string' ? o.totalDebtAmount : '',
+    numberOfCreditors: typeof o.numberOfCreditors === 'string' ? o.numberOfCreditors : '',
+    partnerName: typeof o.partnerName === 'string' ? o.partnerName : '',
+    partnerDob: typeof o.partnerDob === 'string' ? o.partnerDob : '',
+    dependentsCount: typeof o.dependentsCount === 'string' ? o.dependentsCount : '',
     employerName: typeof o.employerName === 'string' ? o.employerName : '',
     jobTitle: typeof o.jobTitle === 'string' ? o.jobTitle : '',
     payslipAvailable: o.payslipAvailable === true,
     incomes: parseArray(o.incomes, parseIncomeRow, base.incomes),
-    bankNames: typeof o.bankNames === 'string' ? o.bankNames : '',
     accountType,
     statementsAvailable: o.statementsAvailable === true,
-    totalDebtAmount: typeof o.totalDebtAmount === 'string' ? o.totalDebtAmount : '',
-    numberOfCreditors: typeof o.numberOfCreditors === 'string' ? o.numberOfCreditors : '',
-    debts: parseArray(o.debts, parseDebtRow, base.debts),
     ccjs: parseArray(o.ccjs, parseCcjRow, base.ccjs),
     councilTaxAmount: typeof o.councilTaxAmount === 'string' ? o.councilTaxAmount : '',
     councilName: typeof o.councilName === 'string' ? o.councilName : '',
-    rentArrears: typeof o.rentArrears === 'string' ? o.rentArrears : '',
     utilitiesDebt: typeof o.utilitiesDebt === 'string' ? o.utilitiesDebt : '',
     waterDebt: typeof o.waterDebt === 'string' ? o.waterDebt : '',
     hmrcDebt: typeof o.hmrcDebt === 'string' ? o.hmrcDebt : '',
@@ -345,6 +422,7 @@ export function parseEmployeeIntakeForm(input: unknown): EmployeeIntakeForm {
     transactionFlags: typeof o.transactionFlags === 'string' ? o.transactionFlags : '',
     familyTransfers: parseArray(o.familyTransfers, parseFamilyTransferRow, base.familyTransfers),
     hasCar: o.hasCar === true,
+    carName: typeof o.carName === 'string' ? o.carName : '',
     carRegistrationNumber: typeof o.carRegistrationNumber === 'string' ? o.carRegistrationNumber : '',
     propertyOwnership: typeof o.propertyOwnership === 'string' ? o.propertyOwnership : '',
     savingsInvestments: typeof o.savingsInvestments === 'string' ? o.savingsInvestments : '',
@@ -366,16 +444,24 @@ export function parseEmployeeIntakeForm(input: unknown): EmployeeIntakeForm {
 
 export function hasEmployeeIntakeData(f: EmployeeIntakeForm): boolean {
   return (
+    !!f.fullName ||
+    !!f.callingNumber ||
+    !!f.whatsappNumber ||
     !!f.dateOfBirth ||
-    !!f.niNumber ||
-    !!f.secondaryNumber ||
     !!f.emailAddress ||
-    !!f.employerName ||
+    !!f.incomeAmount ||
+    !!f.housingStatus ||
     !!f.totalDebtAmount ||
-    !!f.monthlyExpenses ||
+    !!f.bankNames ||
     !!f.internalNotes ||
     addressHistoryTotalMonths(f) > 0 ||
-    f.incomes.some((x) => x.source || x.amount) ||
-    f.debts.some((x) => x.creditorName || x.balance)
+    f.debts.some((x) => x.creditorName || x.amount || x.payment) ||
+    f.benefits.some((x) => x.name || x.amount) ||
+    f.expensesPreset.some((x) => x.amount) ||
+    f.expensesExtra.some((x) => x.name || x.amount) ||
+    f.hasCar ||
+    !!f.carName ||
+    !!f.carRegistrationNumber
   )
 }
+
