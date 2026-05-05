@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name       String
+  email      String   @unique
+  password   String
+  employeeId String?  @unique
+  profileImageUrl String?
+  /// Monthly gross base salary (same currency units as incentives); set by admin.
+  baseSalaryMonthly Float?
+  role       String   @default("EMPLOYEE") // "ADMIN", "EMPLOYEE", "ADVISOR", or "CASE_ASSESSOR"
+  leadsAsEmployee Lead[] @relation("EmployeeLeads")
+  leadsAsAdvisor  Lead[] @relation("AdvisorLeads")
+  leadsAsCaseAssessor Lead[] @relation("CaseAssessorLeads")
+  leaveRequests LeaveRequest[]
+  attendanceEntries AttendanceEntry[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Stores a pending login after password check; OTP is verified in a second step.
+model LoginOtpSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  codeHash  String
+  expiresAt DateTime
+  /// LOGIN (admin/advisor OTP) | EMPLOYEE_CRM (second factor for CRM)
+  purpose   String   @default("LOGIN")
+  createdAt DateTime @default(now())
+}
+
+model LeaveRequest {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewerId String?   @db.ObjectId
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model AttendanceEntry {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayKey      String
+  kind        String
+  status      String    @default("PENDING")
+  reviewerId String?    @db.ObjectId
+  reviewedAt DateTime?
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, dayKey])
+}
+
+model Lead {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  title            String?
+  firstName        String?
+  lastName         String?
+  address          String?
+  postCode         String?
+  phone            String    @unique
+  assignedToId     String?   @db.ObjectId
+  assignedTo       User?     @relation("EmployeeLeads", fields: [assignedToId], references: [id])
+  assignedAdvisorId String?  @db.ObjectId
+  assignedAdvisor   User?    @relation("AdvisorLeads", fields: [assignedAdvisorId], references: [id])
+  assignedCaseAssessorId String?  @db.ObjectId
+  assignedCaseAssessor   User?    @relation("CaseAssessorLeads", fields: [assignedCaseAssessorId], references: [id])
+  assignedDate     DateTime?
+  disposition      String    @default("New")
+  /// Lead stage in assessor flow: REFERRED | VERIFIED | CLAWBACK
+  caseStatus       String    @default("REFERRED")
+  /// Callback date/time selected by employee.
+  callbackAt       DateTime?
+  /// Pre-SIP date/time selected on advisor stage.
+  preSipAt         DateTime?
+  /// Case-assessor checklist progress and compliance data.
+  caseChecklist    Json?
+  remarks          String?
+  employeeIntakeForm Json?
+  moveToAdvisor    Boolean   @default(false)
+  closedSale       Boolean   @default(false)
+  verifiedSale     Boolean   @default(false)
+  paymentReceived  Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  documents        LeadDocument[]
+}
+
+model LeadDocument {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId       String   @db.ObjectId
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fileName     String
+  url          String
+  publicId     String
+  resourceType String   @default("raw")
+  mimeType     String?
+  createdAt    DateTime @default(now())
+}

@@ -1,0 +1,118 @@
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { jwtVerify } from 'jose'
+import { db } from '@/lib/db'
+import { incentiveForVerifiedSalesInMonth } from '@/lib/incentive-tier'
+import {
+  attendanceKindToUnits,
+  monthBoundsUtc,
+  weekdayCountInMonth,
+} from '@/lib/payroll-utils'
+
+type PayrollRow = {
+  employeeId: string
+  name: string | null
+  email: string
+  employeeCode?: string | null
+  baseSalaryMonthly: number | null
+  approvedAttendanceUnits: number
+  weekdayExpected: number
+  attendanceRatio: number
+  baseEarned: number | null
+  verifiedSalesInMonth: number
+  monthlyIncentive: number
+  estimatedGross: number
+}
+
+const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get('token')?.value
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  try {
+    const { payload } = await jwtVerify(token, secret)
+    if (payload.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { searchParams } = new URL(req.url)
+    const now = new Date()
+    let year = parseInt(searchParams.get('year') || '', 10)
+    let month = parseInt(searchParams.get('month') || '', 10)
+    if (!Number.isFinite(year)) year = now.getFullYear()
+    if (!Number.isFinite(month)) month = now.getMonth() + 1
+    month = Math.min(12, Math.max(1, month))
+
+    const { start, end } = monthBoundsUtc(year, month)
+    const wd = weekdayCountInMonth(year, month)
+    const mk = `${year}-${String(month).padStart(2, '0')}`
+
+    const employees = await db.user.findMany({
+      where: { role: 'EMPLOYEE' },
+      select: { id: true, name: true, email: true, employeeId: true, baseSalaryMonthly: true },
+      orderBy: { name: 'asc' },
+    })
+
+    const rows: PayrollRow[] = []
+
+    for (const emp of employees) {
+      const verifiedCount = await db.lead.count({
+        where: {
+          assignedToId: emp.id,
+          verifiedSale: true,
+          updatedAt: { gte: start, lte: end },
+        },
+      })
+      const incentive = incentiveForVerifiedSalesInMonth(verifiedCount)
+
+      const approvedAttendance = await db.attendanceEntry.findMany({
+        where: {
+          userId: emp.id,
+          status: 'APPROVED',
+          dayKey: { startsWith: mk },
+        },
+      })
+
+      let units = 0
+      for (const a of approvedAttendance) {
+        units += attendanceKindToUnits(a.kind)
+      }
+
+      const ratio = Math.min(Math.max(units, 0) / wd, 1)
+      const base = emp.baseSalaryMonthly
+      const baseEarn =
+        base != null && Number.isFinite(base) ? Math.round(base * ratio * 100) / 100 : null
+      const gross = (baseEarn ?? 0) + incentive
+
+      rows.push({
+        employeeId: emp.id,
+        name: emp.name,
+        email: emp.email,
+        employeeCode: emp.employeeId,
+        baseSalaryMonthly: base,
+        approvedAttendanceUnits: Math.round(units * 100) / 100,
+        weekdayExpected: wd,
+        attendanceRatio: Math.round(ratio * 1000) / 1000,
+        baseEarned: baseEarn,
+        verifiedSalesInMonth: verifiedCount,
+        monthlyIncentive: incentive,
+        estimatedGross: Math.round(gross * 100) / 100,
+      })
+    }
+
+    return NextResponse.json({
+      year,
+      month,
+      incentiveTiers: {
+        1: 3000,
+        2: 7000,
+        3: 11000,
+        4: 16000,
+        5: 25000,
+      },
+      rows,
+    })
+  } catch (e) {
+    console.error(e)
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+  }
+}

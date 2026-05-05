@@ -1,0 +1,645 @@
+'use client'
+
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import Navigation from '@/components/Navigation'
+import Link from 'next/link'
+import {
+  Save,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Filter,
+  AlertTriangle,
+  Users,
+  CheckCircle,
+  TrendingUp,
+  ClipboardList,
+} from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useRestrictCopy } from '@/hooks/useRestrictCopy'
+import {
+  addressHistoryMeetsFiveYears,
+  addressHistoryTotalMonths,
+  hasEmployeeIntakeData,
+  parseEmployeeIntakeForm,
+  type EmployeeIntakeForm,
+} from '@/lib/employee-intake-form'
+import { LEAD_DISPOSITIONS } from '@/lib/lead-workflow'
+
+type AdvisorOption = { id: string; name: string }
+
+type Lead = {
+  id: string
+  title: string | null
+  firstName: string | null
+  lastName: string | null
+  address: string | null
+  postCode: string | null
+  phone: string
+  disposition: string
+  remarks: string | null
+  employeeIntakeForm?: unknown
+  moveToAdvisor: boolean
+  assignedAdvisorId: string | null
+  closedSale: boolean
+  verifiedSale: boolean
+  paymentReceived: boolean
+  callbackAt: string | null
+  updatedAt: string
+}
+const DISPOSITIONS = [...LEAD_DISPOSITIONS]
+
+export default function EmployeeCrmPanel() {
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [advisors, setAdvisors] = useState<AdvisorOption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterDisposition, setFilterDisposition] = useState('All')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  
+  // Performance Optimization: Pagination & Debouncing
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 50
+  const [displaySearchTerm, setDisplaySearchTerm] = useState('')
+
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [formDraft, setFormDraft] = useState<EmployeeIntakeForm | null>(null)
+  const lastSavedFormJson = useRef('')
+  const intakeModalOpenRef = useRef(false)
+  intakeModalOpenRef.current = !!expandedId
+  const restrictCopy = useRestrictCopy()
+
+  const openIntakeModal = (lead: Lead) => {
+    const parsed = parseEmployeeIntakeForm(lead.employeeIntakeForm ?? null)
+    setFormDraft(parsed)
+    lastSavedFormJson.current = JSON.stringify(parsed)
+    setExpandedId(lead.id)
+  }
+
+  const persistIntake = useCallback(async (leadId: string, form: EmployeeIntakeForm) => {
+    setSavingId(leadId)
+    try {
+      const res = await fetch(`/api/employee/leads/${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeIntakeForm: form,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.lead && res.ok) {
+        setLeads((prev) =>
+          prev.map((l) =>
+            l.id === leadId
+              ? {
+                  ...l,
+                  remarks: data.lead.remarks ?? l.remarks,
+                  employeeIntakeForm: data.lead.employeeIntakeForm,
+                }
+              : l
+          )
+        )
+        lastSavedFormJson.current = JSON.stringify(form)
+      }
+    } finally {
+      setSavingId(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!expandedId || !formDraft) return
+    const snapshot = JSON.stringify(formDraft)
+    if (snapshot === lastSavedFormJson.current) return
+    const t = setTimeout(() => {
+      void persistIntake(expandedId, formDraft)
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [expandedId, formDraft, persistIntake])
+
+  useEffect(() => {
+    if (!expandedId) setFormDraft(null)
+  }, [expandedId])
+
+  const fetchData = async () => {
+    try {
+      const [leadsRes, advRes] = await Promise.all([
+        fetch('/api/employee/leads'),
+        fetch('/api/employee/advisors'),
+      ])
+      const leadsData = await leadsRes.json()
+      const advData = await advRes.json()
+      if (leadsData.leads) setLeads(leadsData.leads)
+      if (advData.advisors) setAdvisors(advData.advisors)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void fetchData()
+    const interval = setInterval(() => {
+      if (intakeModalOpenRef.current) return
+      void fetchData()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Debounce search term update
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(displaySearchTerm)
+      setCurrentPage(1) // Reset to first page on search
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [displaySearchTerm])
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      const nameMatch = (lead.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                       (lead.lastName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       lead.phone.includes(searchTerm)
+      const dispositionMatch = filterDisposition === 'All' || lead.disposition === filterDisposition
+      return nameMatch && dispositionMatch
+    })
+  }, [leads, searchTerm, filterDisposition])
+
+  const paginatedLeads = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredLeads.slice(start, start + pageSize)
+  }, [filteredLeads, currentPage])
+
+  const totalPages = Math.ceil(filteredLeads.length / pageSize)
+
+  const updateLead = async (id: string, updates: Partial<Lead>, immediate = false) => {
+    setSavingId(id)
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l))
+    
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+
+    const performSave = async () => {
+      try {
+        await fetch(`/api/employee/leads/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        })
+      } finally {
+        setSavingId(null)
+      }
+    }
+
+    if (immediate) {
+      performSave()
+    } else {
+      timeoutRef.current = setTimeout(performSave, 1000)
+    }
+  }
+  
+  const forceSaveIntake = () => {
+    if (!expandedId || !formDraft) return
+    void persistIntake(expandedId, formDraft)
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const notify = () => {
+      const now = Date.now()
+      leads.forEach((lead) => {
+        if (!lead.callbackAt) return
+        const callbackTs = new Date(lead.callbackAt).getTime()
+        const reminderAt = callbackTs - 15 * 60 * 1000
+        if (now < reminderAt || now > callbackTs + 20 * 60 * 1000) return
+        const key = `cb-reminded:${lead.id}:${lead.callbackAt}`
+        if (localStorage.getItem(key)) return
+        localStorage.setItem(key, '1')
+        if (Notification.permission === 'granted') {
+          new Notification('Callback reminder (15 min)', {
+            body: `${lead.firstName || ''} ${lead.lastName || ''} · ${lead.phone}`.trim(),
+          })
+        }
+      })
+    }
+
+    if (Notification.permission === 'default') void Notification.requestPermission()
+    notify()
+    const id = setInterval(notify, 60 * 1000)
+    return () => clearInterval(id)
+  }, [leads])
+
+  const closeIntakeModal = () => setExpandedId(null)
+
+  const intakeHasData = (lead: Lead) =>
+    hasEmployeeIntakeData(parseEmployeeIntakeForm(lead.employeeIntakeForm ?? null)) ||
+    !!lead.remarks?.trim()
+
+  return (
+    <div
+      className="min-h-screen bg-neutral-950 text-neutral-200 select-none"
+      {...restrictCopy}
+    >
+      <Navigation />
+      
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 gap-6">
+          <div>
+            <Link
+              href="/employee"
+              className="text-xs text-blue-400 hover:text-blue-300 mb-2 inline-block"
+            >
+              ← Back to workspace
+            </Link>
+            <h1 className="text-2xl font-bold text-white">CRM · Assigned leads</h1>
+            <p className="text-neutral-400 text-sm mt-1">Calling data, intake forms, and advisor escalation.</p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <input 
+                type="text" 
+                placeholder="Search my leads..."
+                value={displaySearchTerm}
+                onChange={e => setDisplaySearchTerm(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white select-text"
+              />
+            </div>
+
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <select 
+                value={filterDisposition}
+                onChange={e => setFilterDisposition(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 text-white rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none transition-all select-text"
+              >
+                <option value="All" className="bg-neutral-900 text-white">All Dispositions</option>
+                {DISPOSITIONS.map(d => (
+                  <option key={d} value={d} className="bg-neutral-900 text-white">
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Stats Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[
+            { 
+              label: 'Total Assigned', 
+              value: leads.length, 
+              icon: Users, 
+              color: 'text-blue-500', 
+              bg: 'bg-blue-500/10' 
+            },
+            { 
+              label: 'Actioned Leads', 
+              value: leads.filter(l => l.disposition !== 'New').length, 
+              icon: TrendingUp, 
+              color: 'text-emerald-500', 
+              bg: 'bg-emerald-500/10' 
+            },
+            { 
+              label: 'Escalated Pending', 
+              value: leads.filter(l => l.moveToAdvisor || l.assignedAdvisorId).length, 
+              icon: AlertTriangle, 
+              color: 'text-amber-500', 
+              bg: 'bg-amber-500/10' 
+            },
+            { 
+              label: 'Closed Won', 
+              value: leads.filter(l => l.closedSale).length, 
+              icon: CheckCircle, 
+              color: 'text-teal-500', 
+              bg: 'bg-teal-500/10' 
+            },
+          ].map((stat, i) => {
+            const Icon = stat.icon
+            return (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex items-center gap-4 group hover:border-neutral-700 transition-colors"
+              >
+                <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-white leading-none">{stat.value}</p>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-widest mt-1.5">{stat.label}</p>
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+
+        <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-800 bg-neutral-900/80 text-xs uppercase tracking-wider text-neutral-400">
+                  <th className="p-4 w-10"></th>
+                  <th className="p-4 font-medium">Title</th>
+                  <th className="p-4 font-medium">First Name</th>
+                  <th className="p-4 font-medium">Last Name</th>
+                  <th className="p-4 font-medium">Address</th>
+                  <th className="p-4 font-medium">Post Code</th>
+                  <th className="p-4 font-medium">Phone Number</th>
+                  <th className="p-4 font-medium">Disposition</th>
+                  <th className="p-4 font-medium">Callback</th>
+                  <th className="p-4 font-medium text-center">Intake form</th>
+                  <th className="p-4 font-medium text-center">Send to Advisor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/50">
+                {loading ? (
+                   <tr>
+                     <td colSpan={11} className="p-8 text-center text-neutral-500">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                        Loading assigned leads...
+                     </td>
+                   </tr>
+                ) : filteredLeads.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="p-8 text-center text-neutral-500">
+                      No leads found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedLeads.map(lead => (
+                    <motion.tr 
+                      key={lead.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className={`hover:bg-neutral-800/30 transition-colors ${expandedId === lead.id ? 'bg-neutral-800/20' : ''}`}
+                    >
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            expandedId === lead.id ? closeIntakeModal() : openIntakeModal(lead)
+                          }
+                          className="text-neutral-500 hover:text-white transition-colors"
+                          aria-expanded={expandedId === lead.id}
+                        >
+                          {expandedId === lead.id ? (
+                            <ChevronDown className="w-4 h-4" aria-hidden />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" aria-hidden />
+                          )}
+                        </button>
+                      </td>
+                      <td className="p-4 text-neutral-300">{lead.title || '-'}</td>
+                      <td className="p-4 font-medium text-white">{lead.firstName}</td>
+                      <td className="p-4 text-neutral-300">{lead.lastName || '-'}</td>
+                      <td className="p-4 text-neutral-400 truncate max-w-[150px]" title={lead.address || ''}>{lead.address || '-'}</td>
+                      <td className="p-4 text-neutral-400">{lead.postCode || '-'}</td>
+                      <td className="p-4 font-mono text-neutral-300">
+                        <a href={`tel:${lead.phone}`} className="hover:text-blue-400 underline decoration-neutral-700 underline-offset-4">{lead.phone}</a>
+                      </td>
+                      <td className="p-4">
+                        <select 
+                          value={lead.disposition}
+                          onChange={(e) => updateLead(lead.id, { disposition: e.target.value })}
+                          className="bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] font-bold text-white focus:outline-none focus:ring-1 focus:ring-blue-500 select-text"
+                        >
+                          {DISPOSITIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-4 min-w-[190px]">
+                        <input
+                          type="datetime-local"
+                          value={lead.callbackAt ? lead.callbackAt.slice(0, 16) : ''}
+                          onChange={(e) =>
+                            updateLead(lead.id, { callbackAt: e.target.value ? new Date(e.target.value).toISOString() : null }, true)
+                          }
+                          className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            expandedId === lead.id ? closeIntakeModal() : openIntakeModal(lead)
+                          }
+                          className={`transition-colors ${intakeHasData(lead) ? 'text-blue-400' : 'text-neutral-500 hover:text-blue-400'}`}
+                          title="Open intake form"
+                        >
+                          <ClipboardList className="w-4 h-4 inline" aria-hidden />
+                        </button>
+                      </td>
+                      <td className="p-4 min-w-[160px]">
+                        <select
+                          value={lead.assignedAdvisorId ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            updateLead(
+                              lead.id,
+                              {
+                                assignedAdvisorId: v ? v : null,
+                                moveToAdvisor: !!v,
+                              },
+                              true
+                            )
+                          }}
+                          className="w-full max-w-[200px] bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] font-bold text-white focus:outline-none focus:ring-1 focus:ring-amber-500 select-text"
+                        >
+                          <option value="">— Select advisor —</option>
+                          {advisors.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </motion.tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="bg-neutral-900/80 border-t border-neutral-800 p-4 flex items-center justify-between gap-4">
+              <div className="text-xs text-neutral-500">
+                Showing {Math.min(filteredLeads.length, (currentPage - 1) * pageSize + 1)} to {Math.min(filteredLeads.length, currentPage * pageSize)} of {filteredLeads.length} leads
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded text-xs transition-colors border border-neutral-700 font-bold text-white"
+                >
+                   Prev
+                </button>
+                <div className="flex bg-neutral-950 p-1 rounded-lg border border-neutral-800">
+                  <span className="px-3 py-1 text-xs font-bold text-blue-400">Page {currentPage} of {totalPages}</span>
+                </div>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded text-xs transition-colors border border-neutral-700 font-bold text-white"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Employee intake modal */}
+        <AnimatePresence>
+          {expandedId && formDraft && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeIntakeModal()
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-neutral-800 bg-neutral-900 shadow-2xl p-6"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-start mb-6 gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <ClipboardList className="w-5 h-5 text-blue-500" aria-hidden /> Lead intake
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-1 font-mono">
+                      {(() => {
+                        const l = leads.find((x) => x.id === expandedId)
+                        return l
+                          ? [l.firstName, l.lastName].filter(Boolean).join(' ') + ' · ' + l.phone
+                          : ''
+                      })()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {savingId === expandedId && (
+                      <span className="text-xs text-blue-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" aria-hidden /> Saving…
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={closeIntakeModal}
+                      className="text-neutral-500 hover:text-white w-9 h-9 flex items-center justify-center rounded-lg hover:bg-neutral-800 bg-neutral-950 border border-neutral-800"
+                      aria-label="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-5 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">DOB</label>
+                      <input type="date" value={formDraft.dateOfBirth} onChange={(e) => setFormDraft({ ...formDraft, dateOfBirth: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Marital status</label>
+                      <select value={formDraft.maritalStatus} onChange={(e) => setFormDraft({ ...formDraft, maritalStatus: e.target.value as EmployeeIntakeForm['maritalStatus'] })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+                        <option value="">—</option><option value="SINGLE">Single</option><option value="MARRIED">Married</option><option value="PARTNER">Partner</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">NI number</label>
+                      <input value={formDraft.niNumber} onChange={(e) => setFormDraft({ ...formDraft, niNumber: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Secondary number</label>
+                      <input value={formDraft.secondaryNumber} onChange={(e) => setFormDraft({ ...formDraft, secondaryNumber: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Address history (min 5 years)</span>
+                      <button type="button" onClick={() => setFormDraft({ ...formDraft, addressHistory: [...formDraft.addressHistory, { fullAddress: '', postCode: '', type: 'PREVIOUS', durationMonths: 12 }] })} className="text-xs text-blue-400">+ Add</button>
+                    </div>
+                    <p className={`text-xs ${addressHistoryMeetsFiveYears(formDraft) ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      Total coverage: {addressHistoryTotalMonths(formDraft)} months
+                    </p>
+                    {formDraft.addressHistory.map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                        <input value={row.fullAddress} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, fullAddress: e.target.value } : r) })} placeholder="Full address" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                        <input value={row.postCode} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, postCode: e.target.value } : r) })} placeholder="Postcode" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                        <select value={row.type} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, type: e.target.value as 'CURRENT' | 'PREVIOUS' } : r) })} className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+                          <option value="CURRENT">Current</option><option value="PREVIOUS">Previous</option>
+                        </select>
+                        <input type="number" min={0} value={row.durationMonths} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, durationMonths: Number(e.target.value) || 0 } : r) })} className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                        <button type="button" onClick={() => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.filter((_, i) => i !== idx) })} className="sm:col-span-1 text-xs text-red-400">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Employment</label>
+                      <select value={formDraft.employmentStatus} onChange={(e) => setFormDraft({ ...formDraft, employmentStatus: e.target.value as EmployeeIntakeForm['employmentStatus'] })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+                        <option value="">—</option><option value="FT">FT</option><option value="PT">PT</option><option value="SELF_EMPLOYED">Self-employed</option><option value="UNEMPLOYED">Unemployed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Employer</label>
+                      <input value={formDraft.employerName} onChange={(e) => setFormDraft({ ...formDraft, employerName: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Total debt</label>
+                      <input value={formDraft.totalDebtAmount} onChange={(e) => setFormDraft({ ...formDraft, totalDebtAmount: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">No. of creditors</label>
+                      <input value={formDraft.numberOfCreditors} onChange={(e) => setFormDraft({ ...formDraft, numberOfCreditors: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Priority debt + monthly expenses</label>
+                    <textarea value={formDraft.monthlyExpenses} onChange={(e) => setFormDraft({ ...formDraft, monthlyExpenses: e.target.value })} rows={4} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" placeholder="Council tax, rent arrears, utilities, HMRC, overpayments, monthly expenses..." />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Transactions + family transfers</label>
+                    <textarea value={formDraft.transactionFlags} onChange={(e) => setFormDraft({ ...formDraft, transactionFlags: e.target.value })} rows={3} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" placeholder="Gambling flags, large cash, transfers, irregular income..." />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Assets, docs, risk and affordability summary</label>
+                    <textarea value={formDraft.affordabilitySummary} onChange={(e) => setFormDraft({ ...formDraft, affordabilitySummary: e.target.value })} rows={4} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" placeholder="Car/reg, property/savings, docs available, vulnerabilities, plan recommendation..." />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Internal notes</label>
+                    <textarea value={formDraft.internalNotes} onChange={(e) => setFormDraft({ ...formDraft, internalNotes: e.target.value })} rows={3} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-6 pt-4 border-t border-neutral-800">
+                  <span className="text-[10px] text-neutral-500">
+                    Changes save automatically after about 1s without edits.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={forceSaveIntake}
+                    disabled={savingId === expandedId}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-2"
+                  >
+                    <Save className="w-3.5 h-3.5" aria-hidden /> Save now
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  )
+}
