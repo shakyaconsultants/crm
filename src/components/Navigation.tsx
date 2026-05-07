@@ -14,6 +14,7 @@ const ADMIN_NAV_LINKS = [
   { href: '/admin/attendance-review', label: 'Attendance' },
   { href: '/admin/advisors', label: 'Advisors' },
   { href: '/admin/case-assessors', label: 'Assessors' },
+  { href: '/admin/cases', label: 'Cases' },
 ] as const
 
 function adminLinkActive(pathname: string, href: string, exact?: boolean) {

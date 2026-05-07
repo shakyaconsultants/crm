@@ -83,7 +83,7 @@ model Lead {
   assignedCaseAssessor   User?    @relation("CaseAssessorLeads", fields: [assignedCaseAssessorId], references: [id])
   assignedDate     DateTime?
   disposition      String    @default("New")
-  /// Lead stage in assessor flow: REFERRED | VERIFIED | CLAWBACK
+  /// Lead stage in assessor flow: PENDING | REFERRED | VERIFIED | CLAWBACK
   caseStatus       String    @default("REFERRED")
   /// Callback date/time selected by employee.
   callbackAt       DateTime?

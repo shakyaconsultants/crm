@@ -4,6 +4,7 @@ import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { CASE_STATUSES, parseCaseChecklist } from '@/lib/lead-workflow'
+import { parseEmployeeIntakeForm, addressHistoryMeetsFiveYears } from '@/lib/employee-intake-form'
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET)
 
@@ -32,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const data: {
       caseStatus?: string
       caseChecklist?: Prisma.InputJsonValue
+      preSipAt?: Date | null
+      employeeIntakeForm?: Prisma.InputJsonValue
+      verifiedSale?: boolean
     } = {}
 
     if (body.caseStatus !== undefined) {
@@ -39,10 +43,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: 'Invalid case status' }, { status: 400 })
       }
       data.caseStatus = body.caseStatus
+      data.verifiedSale = body.caseStatus === 'VERIFIED'
     }
 
     if (body.caseChecklist !== undefined) {
       data.caseChecklist = parseCaseChecklist(body.caseChecklist) as unknown as Prisma.InputJsonValue
+    }
+
+    if (body.preSipAt !== undefined) {
+      data.preSipAt = body.preSipAt ? new Date(body.preSipAt) : null
+    }
+
+    if (body.employeeIntakeForm !== undefined) {
+      const parsed = parseEmployeeIntakeForm(body.employeeIntakeForm)
+      if (!addressHistoryMeetsFiveYears(parsed)) {
+        return NextResponse.json(
+          { error: 'Address history should cover at least 5 years (60 months).' },
+          { status: 400 }
+        )
+      }
+      data.employeeIntakeForm = parsed as unknown as Prisma.InputJsonValue
     }
 
     if (Object.keys(data).length === 0) {

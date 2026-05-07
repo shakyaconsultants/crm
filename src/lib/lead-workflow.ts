@@ -9,7 +9,7 @@ export const LEAD_DISPOSITIONS = [
 
 export type LeadDisposition = (typeof LEAD_DISPOSITIONS)[number]
 
-export const CASE_STATUSES = ['REFERRED', 'VERIFIED', 'CLAWBACK'] as const
+export const CASE_STATUSES = ['PENDING', 'REFERRED', 'VERIFIED', 'CLAWBACK'] as const
 export type CaseStatus = (typeof CASE_STATUSES)[number]
 
 export type CaseChecklist = {

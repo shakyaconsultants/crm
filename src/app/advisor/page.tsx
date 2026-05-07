@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Navigation from '@/components/Navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -18,8 +18,8 @@ import {
   X,
 } from 'lucide-react'
 import { useRestrictCopy } from '@/hooks/useRestrictCopy'
-import { parseEmployeeIntakeForm } from '@/lib/employee-intake-form'
-import { INTAKE_DISPLAY_SECTIONS, intakeFieldLabel, intakeValueToText } from '@/lib/employee-intake-display'
+import { emptyEmployeeIntakeForm, parseEmployeeIntakeForm, type EmployeeIntakeForm } from '@/lib/employee-intake-form'
+import EmployeeIntakeFormEditor from '@/components/employee/EmployeeIntakeFormEditor'
 
 type CaseAssessorOption = { id: string; name: string }
 
@@ -82,6 +82,8 @@ export default function AdminAdvisorPage() {
   const [displaySearchTerm, setDisplaySearchTerm] = useState('')
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [intakeDraft, setIntakeDraft] = useState<EmployeeIntakeForm | null>(null)
+  const lastSavedIntake = useRef('')
   const restrictCopy = useRestrictCopy()
 
   const fetchData = async () => {
@@ -150,17 +152,33 @@ export default function AdminAdvisorPage() {
     }
   }
 
-  const forceSave = (id: string) => {
-    const lead = leads.find((l) => l.id === id)
-    if (lead) updateLead(id, { remarks: lead.remarks }, true)
-  }
-
   const expandedLead = expandedId ? leads.find((l) => l.id === expandedId) : null
-  const expandedLeadRemarks = expandedLead?.remarks || ''
-  const expandedLeadIntake = useMemo(
-    () => parseEmployeeIntakeForm(expandedLead?.employeeIntakeForm ?? null),
-    [expandedLead?.employeeIntakeForm]
-  )
+
+  useEffect(() => {
+    if (!expandedLead) {
+      setIntakeDraft(null)
+      return
+    }
+    const parsed = parseEmployeeIntakeForm(expandedLead.employeeIntakeForm ?? null)
+    setIntakeDraft(parsed)
+    lastSavedIntake.current = JSON.stringify(parsed)
+  }, [expandedLead?.id, expandedLead?.employeeIntakeForm])
+
+  const persistIntake = useCallback(async () => {
+    if (!expandedId || !intakeDraft) return
+    await updateLead(expandedId, { employeeIntakeForm: intakeDraft } as Partial<Lead>, true)
+    lastSavedIntake.current = JSON.stringify(intakeDraft)
+  }, [expandedId, intakeDraft])
+
+  useEffect(() => {
+    if (!expandedId || !intakeDraft) return
+    const current = JSON.stringify(intakeDraft)
+    if (current === lastSavedIntake.current) return
+    const t = setTimeout(() => {
+      void persistIntake()
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [expandedId, intakeDraft, persistIntake])
 
   const refreshLeads = async () => {
     const leadsRes = await fetch('/api/advisor/leads')
@@ -335,7 +353,7 @@ export default function AdminAdvisorPage() {
                   <th className="p-4 font-medium">Last Name</th>
                   <th className="p-4 font-medium">Phone Number</th>
                   <th className="p-4 font-medium text-center">Assigned To</th>
-                  <th className="p-4 font-medium text-center">Remark</th>
+                  <th className="p-4 font-medium text-center">Intake / Notes</th>
                   <th className="p-4 font-medium text-center">Documents</th>
                   <th className="p-4 font-medium text-center">Drop</th>
                   <th className="p-4 font-medium min-w-[180px]">Assign case assessor</th>
@@ -505,46 +523,29 @@ export default function AdminAdvisorPage() {
 
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 mb-3">
                   <p className="text-xs text-blue-200 font-semibold tracking-wide uppercase mb-3">
-                    Full Intake Form (Read Only)
+                    Lead Intake Form (Editable)
                   </p>
-                  <div className="max-h-[42vh] overflow-y-auto pr-1 space-y-3">
-                    {INTAKE_DISPLAY_SECTIONS.map((section) => (
-                      <div key={section.title} className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-2">
-                          {section.title}
-                        </p>
-                        <div className="space-y-2">
-                          {section.fields.map((field) => (
-                            <div key={String(field)} className="text-sm leading-6 text-neutral-200">
-                              <span className="font-bold text-neutral-100">{intakeFieldLabel(String(field))}: </span>
-                              <span className="whitespace-pre-wrap">{intakeValueToText((expandedLeadIntake as Record<string, unknown>)[String(field)])}</span>
-                            </div>
-                          ))}
-                        </div>
+                  <div className="max-h-[52vh] overflow-y-auto pr-1">
+                    {intakeDraft ? (
+                      <EmployeeIntakeFormEditor form={intakeDraft} setForm={setIntakeDraft} />
+                    ) : (
+                      <div className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-4 text-sm text-neutral-500">
+                        No intake form data yet.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
-                  <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-2">
-                    Advisor Notes (Editable)
-                  </p>
-                  <textarea
-                    value={expandedLeadRemarks}
-                    onChange={(e) => updateLead(expandedId, { remarks: e.target.value })}
-                    placeholder="Write notes in paragraphs. Add follow-up actions and context for the case assessor."
-                    className="w-full bg-neutral-950 p-4 rounded-xl border border-neutral-800 text-neutral-100 text-sm leading-6 whitespace-pre-wrap min-h-[220px] max-h-[35vh] focus:ring-2 focus:ring-amber-500/50 outline-none resize-y transition-all placeholder:text-neutral-600 select-text overflow-y-auto"
-                  />
-                </div>
                 <div className="flex justify-between items-center mt-3">
                   <span className="text-[10px] text-neutral-500 italic">Auto-sync active (1s delay)</span>
                   <button
                     type="button"
-                    onClick={() => forceSave(expandedId!)}
+                    onClick={async () => {
+                      await persistIntake()
+                    }}
                     className="bg-amber-600 hover:bg-amber-700 text-neutral-950 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
                   >
-                    <Save className="w-3 h-3" /> Force Save
+                    <Save className="w-3 h-3" /> Save now
                   </button>
                 </div>
               </motion.div>

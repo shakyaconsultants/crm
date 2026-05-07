@@ -17,8 +17,8 @@ import {
 } from 'lucide-react'
 import { useRestrictCopy } from '@/hooks/useRestrictCopy'
 import { CASE_STATUSES, parseCaseChecklist, type CaseChecklist } from '@/lib/lead-workflow'
-import { parseEmployeeIntakeForm } from '@/lib/employee-intake-form'
-import { INTAKE_DISPLAY_SECTIONS, intakeFieldLabel, intakeValueToText } from '@/lib/employee-intake-display'
+import { parseEmployeeIntakeForm, type EmployeeIntakeForm } from '@/lib/employee-intake-form'
+import EmployeeIntakeFormEditor from '@/components/employee/EmployeeIntakeFormEditor'
 
 type Lead = {
   id: string
@@ -72,6 +72,7 @@ export default function CaseAssessorPage() {
   const [documentError, setDocumentError] = useState<string | null>(null)
   const [checklistLeadId, setChecklistLeadId] = useState<string | null>(null)
   const [checklistDraft, setChecklistDraft] = useState<CaseChecklist | null>(null)
+  const [intakeDraft, setIntakeDraft] = useState<EmployeeIntakeForm | null>(null)
   const [savingChecklist, setSavingChecklist] = useState(false)
   const docFileInputRef = useRef<HTMLInputElement | null>(null)
   const replaceTargetDocIdRef = useRef<string | null>(null)
@@ -107,6 +108,8 @@ export default function CaseAssessorPage() {
     updates: {
       caseStatus?: string
       caseChecklist?: unknown
+      preSipAt?: string | null
+      employeeIntakeForm?: unknown
     }
   ) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)))
@@ -120,18 +123,27 @@ export default function CaseAssessorPage() {
   const openChecklistModal = (lead: Lead) => {
     setChecklistLeadId(lead.id)
     setChecklistDraft(parseCaseChecklist(lead.caseChecklist ?? null))
+    setIntakeDraft(parseEmployeeIntakeForm(lead.employeeIntakeForm ?? null))
   }
   const closeChecklistModal = () => {
     setChecklistLeadId(null)
     setChecklistDraft(null)
+    setIntakeDraft(null)
   }
   const saveChecklist = async () => {
     if (!checklistLeadId || !checklistDraft) return
     setSavingChecklist(true)
     try {
-      await updateLead(checklistLeadId, { caseChecklist: checklistDraft })
+      await updateLead(checklistLeadId, {
+        caseChecklist: checklistDraft,
+        employeeIntakeForm: intakeDraft ?? undefined,
+      })
       setLeads((prev) =>
-        prev.map((l) => (l.id === checklistLeadId ? { ...l, caseChecklist: checklistDraft } : l))
+        prev.map((l) =>
+          l.id === checklistLeadId
+            ? { ...l, caseChecklist: checklistDraft, employeeIntakeForm: intakeDraft ?? l.employeeIntakeForm }
+            : l
+        )
       )
       closeChecklistModal()
     } finally {
@@ -270,10 +282,29 @@ export default function CaseAssessorPage() {
       leadForDocuments.phone
     : ''
   const checklistLead = checklistLeadId ? leads.find((l) => l.id === checklistLeadId) : null
-  const checklistLeadIntake = useMemo(
-    () => parseEmployeeIntakeForm(checklistLead?.employeeIntakeForm ?? null),
-    [checklistLead?.employeeIntakeForm]
-  )
+  const checklistUsed = (input: unknown) => {
+    const c = parseCaseChecklist(input)
+    return Boolean(
+      c.incomeMonthly ||
+        c.employmentStatus ||
+        c.kidsDob.length ||
+        c.carRegistration ||
+        c.idProofType ||
+        c.debtLevel ||
+        c.debtPlan ||
+        c.notes ||
+        c.incomeEligible ||
+        c.payslipVerified ||
+        c.universalCreditStatementUploaded ||
+        c.universalCreditVisible ||
+        c.hasKids ||
+        c.hasCar ||
+        c.nonEnglish ||
+        c.rightToRemainUploaded ||
+        c.amlCheckRequired ||
+        c.threeWayCallCompleted
+    )
+  }
 
   return (
     <div
@@ -324,7 +355,9 @@ export default function CaseAssessorPage() {
                     <th className="p-4 font-medium">Phone</th>
                     <th className="p-4 font-medium">Employee</th>
                     <th className="p-4 font-medium">Advisor</th>
+                    <th className="p-4 font-medium">SIP timing</th>
                     <th className="p-4 font-medium text-center">Case status</th>
+                    <th className="p-4 font-medium text-center">Checklist used</th>
                     <th className="p-4 font-medium text-center">Checklist</th>
                     <th className="p-4 font-medium text-center">Documents</th>
                   </tr>
@@ -345,9 +378,22 @@ export default function CaseAssessorPage() {
                       </td>
                       <td className="p-4 text-neutral-400">{l.assignedTo?.name || '—'}</td>
                       <td className="p-4 text-neutral-400">{l.assignedAdvisor?.name || '—'}</td>
+                      <td className="p-4 min-w-[190px]">
+                        <input
+                          type="datetime-local"
+                          value={l.preSipAt ? l.preSipAt.slice(0, 16) : ''}
+                          onChange={(e) =>
+                            updateLead(
+                              l.id,
+                              { preSipAt: e.target.value ? new Date(e.target.value).toISOString() : null }
+                            )
+                          }
+                          className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                      </td>
                       <td className="p-4 text-center">
                         <select
-                          value={l.caseStatus || 'REFERRED'}
+                          value={l.caseStatus || 'PENDING'}
                           onChange={(e) => updateLead(l.id, { caseStatus: e.target.value })}
                           className="bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] font-bold text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         >
@@ -357,6 +403,17 @@ export default function CaseAssessorPage() {
                             </option>
                           ))}
                         </select>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            checklistUsed(l.caseChecklist)
+                              ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/25'
+                              : 'bg-neutral-800 text-neutral-400 ring-1 ring-neutral-700'
+                          }`}
+                        >
+                          {checklistUsed(l.caseChecklist) ? 'Used' : 'Not used'}
+                        </span>
                       </td>
                       <td className="p-4 text-center">
                         <button
@@ -410,30 +467,16 @@ export default function CaseAssessorPage() {
                 </div>
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 mb-4">
                   <p className="text-xs text-cyan-200 font-semibold tracking-wide uppercase mb-3">
-                    Full Intake Form
+                    Full Intake Form (Editable)
                   </p>
-                  <div className="max-h-[36vh] overflow-y-auto pr-1 space-y-3">
-                    {INTAKE_DISPLAY_SECTIONS.map((section) => (
-                      <div key={section.title} className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-2">
-                          {section.title}
-                        </p>
-                        <div className="space-y-2">
-                          {section.fields.map((field) => (
-                            <div key={String(field)} className="text-sm leading-6 text-neutral-200">
-                              <span className="font-bold text-neutral-100">{intakeFieldLabel(String(field))}: </span>
-                              <span className="whitespace-pre-wrap">{intakeValueToText((checklistLeadIntake as Record<string, unknown>)[String(field)])}</span>
-                            </div>
-                          ))}
-                        </div>
+                  <div className="max-h-[40vh] overflow-y-auto pr-1">
+                    {intakeDraft ? (
+                      <EmployeeIntakeFormEditor form={intakeDraft} setForm={setIntakeDraft} />
+                    ) : (
+                      <div className="rounded-lg border border-neutral-800 bg-neutral-950/70 p-4 text-sm text-neutral-500">
+                        No intake form data yet.
                       </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950/70 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-1">Advisor Notes</p>
-                    <p className="text-sm leading-6 text-neutral-200 whitespace-pre-wrap max-h-[120px] overflow-y-auto">
-                      {checklistLead?.remarks?.trim() || '—'}
-                    </p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">

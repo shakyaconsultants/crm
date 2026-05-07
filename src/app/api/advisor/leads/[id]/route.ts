@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
+import { parseEmployeeIntakeForm, addressHistoryMeetsFiveYears } from '@/lib/employee-intake-form'
+import type { Prisma } from '@prisma/client'
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET)
 
@@ -32,6 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       verifiedSale?: boolean
       assignedCaseAssessorId?: string | null
       preSipAt?: Date | null
+      employeeIntakeForm?: Prisma.InputJsonValue
+      caseStatus?: string
     } = {}
 
     if (body.remarks !== undefined) data.remarks = body.remarks
@@ -39,6 +43,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.verifiedSale !== undefined) data.verifiedSale = body.verifiedSale
     if (body.preSipAt !== undefined) {
       data.preSipAt = body.preSipAt ? new Date(body.preSipAt) : null
+    }
+
+    if (body.employeeIntakeForm !== undefined) {
+      const parsed = parseEmployeeIntakeForm(body.employeeIntakeForm)
+      if (!addressHistoryMeetsFiveYears(parsed)) {
+        return NextResponse.json(
+          { error: 'Address history should cover at least 5 years (60 months).' },
+          { status: 400 }
+        )
+      }
+      data.employeeIntakeForm = parsed as unknown as Prisma.InputJsonValue
     }
 
     if (body.assignedCaseAssessorId !== undefined) {
@@ -53,6 +68,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           return NextResponse.json({ error: 'Invalid case assessor' }, { status: 400 })
         }
         data.assignedCaseAssessorId = cid
+        if (!existing.assignedCaseAssessorId) {
+          data.caseStatus = 'PENDING'
+        }
       }
     }
 
