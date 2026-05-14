@@ -4,14 +4,30 @@ import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import type { NextRequest } from 'next/server'
 import { EMPLOYEE_SESSION_COOKIE_MAX_AGE, EMPLOYEE_SESSION_JWT_EXP } from '@/lib/employee-session'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 
 const PENDING_COOKIE = 'pending_login'
+const OTP_MAX_ATTEMPTS = 5
+const otpFailures = new Map<string, number>()
 
 export async function POST(req: NextRequest) {
   try {
     const sessionId = req.cookies.get(PENDING_COOKIE)?.value
+    const ip = getClientIp(req)
+    const rl = checkRateLimit({
+      key: `otp:login:ip:${ip}`,
+      limit: 20,
+      windowMs: 10 * 60 * 1000,
+    })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Please wait and retry.' },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+      )
+    }
     if (!sessionId) {
       return NextResponse.json({ error: 'Session expired. Please sign in again.' }, { status: 401 })
     }
@@ -50,9 +66,22 @@ export async function POST(req: NextRequest) {
 
     const ok = await bcrypt.compare(normalized, session.codeHash)
     if (!ok) {
+      const failCount = (otpFailures.get(sessionId) ?? 0) + 1
+      otpFailures.set(sessionId, failCount)
+      if (failCount >= OTP_MAX_ATTEMPTS) {
+        await db.loginOtpSession.delete({ where: { id: sessionId } }).catch(() => {})
+        otpFailures.delete(sessionId)
+        const res = NextResponse.json(
+          { error: 'Too many invalid attempts. Please sign in again.' },
+          { status: 429 }
+        )
+        res.cookies.delete(PENDING_COOKIE)
+        return res
+      }
       return NextResponse.json({ error: 'Invalid code' }, { status: 401 })
     }
 
+    otpFailures.delete(sessionId)
     const user = await db.user.findUnique({ where: { id: session.userId } })
     if (!user) {
       await db.loginOtpSession.delete({ where: { id: sessionId } }).catch(() => {})

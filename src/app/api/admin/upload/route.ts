@@ -2,8 +2,14 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import cloudinary, { isCloudinaryConfigured } from '@/lib/cloudinary'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import {
+  ALLOWED_LEAD_IMPORT_MIME,
+  MAX_CSV_IMPORT_BYTES,
+  hasAllowedMime,
+} from '@/lib/upload-security'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -28,9 +34,21 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData()
     const file = formData.get('file') as File
-    
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+    if (!hasAllowedMime(file.type || '', ALLOWED_LEAD_IMPORT_MIME)) {
+      return NextResponse.json(
+        { error: 'Unsupported file type. Use CSV or XLSX.' },
+        { status: 400 }
+      )
+    }
+    if (file.size > MAX_CSV_IMPORT_BYTES) {
+      return NextResponse.json(
+        { error: 'File too large. Max size is 8MB.' },
+        { status: 400 }
+      )
     }
 
     const bytes = await file.arrayBuffer()

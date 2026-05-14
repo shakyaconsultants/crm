@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Navigation from '@/components/Navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, Check, Save, Loader2, ChevronDown, ChevronRight, MessageSquare, AlertTriangle, Search, Filter, Trash2, Copy, TrendingUp } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import Papa from 'papaparse'
+import { readSheet } from 'read-excel-file/browser'
 import { LEAD_PHONE_HELP_TEXT, parseLeadPhoneForStorage } from '@/lib/phone'
 import { LEAD_DISPOSITIONS } from '@/lib/lead-workflow'
 
@@ -14,7 +15,12 @@ type Lead = {
   title: string | null
   firstName: string | null
   lastName: string | null
+  email: string | null
   address: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  addressLine3: string | null
+  addressLine4: string | null
   postCode: string | null
   phone: string
   assignedToId: string | null
@@ -39,6 +45,8 @@ export default function AdminLeadsPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDisposition, setFilterDisposition] = useState('All')
@@ -51,6 +59,32 @@ export default function AdminLeadsPage() {
   const [showSelectedOnly, setShowSelectedOnly] = useState(false)
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const toRecordRows = async (file: File): Promise<Record<string, unknown>[]> => {
+    const lowerName = file.name.toLowerCase()
+    if (lowerName.endsWith('.csv')) {
+      const text = await file.text()
+      const parsed = Papa.parse<Record<string, unknown>>(text, {
+        header: true,
+        skipEmptyLines: true,
+      })
+      if (parsed.errors.length > 0) {
+        throw new Error(parsed.errors[0]?.message || 'Failed to parse CSV')
+      }
+      return parsed.data
+    }
+
+    const rows = await readSheet(file)
+    if (!rows.length) return []
+    const header = rows[0].map((x) => String(x ?? '').trim())
+    return rows.slice(1).map((row) => {
+      const out: Record<string, unknown> = {}
+      header.forEach((key, idx) => {
+        out[key] = row[idx]
+      })
+      return out
+    })
+  }
 
   const fetchData = async () => {
     try {
@@ -87,6 +121,7 @@ export default function AdminLeadsPage() {
       if (showSelectedOnly && !selectedLeads.has(lead.id)) return false
       const nameMatch = (lead.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                        (lead.lastName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                        lead.phone.includes(searchTerm)
       const dispositionMatch = filterDisposition === 'All' || lead.disposition === filterDisposition
       return nameMatch && dispositionMatch
@@ -113,21 +148,20 @@ export default function AdminLeadsPage() {
       
       if (!uploadData.success) throw new Error(uploadData.error || 'Upload failed')
 
-      const reader = new FileReader()
-      reader.onload = async (evt) => {
-        try {
-          const dataArr = evt.target?.result
-          const wb = XLSX.read(dataArr, { type: 'array' })
-          const ws = wb.Sheets[wb.SheetNames[0]]
-          const data = XLSX.utils.sheet_to_json(ws)
-
-          const parsedRows = data.map((row: any) => {
+      try {
+          const data = await toRecordRows(file)
+          const parsedRows = data.map((row) => {
             const raw = row.phone ?? row.Phone ?? row.Number ?? ''
             return {
               title: row.title || row.Title || '',
               firstName: row.firstName || row.FirstName || row['First Name'] || '',
               lastName: row.lastName || row.LastName || row['Last Name'] || '',
-              address: row.address || row.Address || '',
+              email: row.email || row.Email || row['E-mail'] || row['Email Address'] || '',
+              addressLine1: row.addressLine1 || row['Address Line 1'] || row['Address 1'] || row.address1 || '',
+              addressLine2: row.addressLine2 || row['Address Line 2'] || row['Address 2'] || row.address2 || '',
+              addressLine3: row.addressLine3 || row['Address Line 3'] || row['Address 3'] || row.address3 || '',
+              addressLine4: row.addressLine4 || row['Address Line 4'] || row['Address 4'] || row.address4 || '',
+              address: row.address || row.Address || row['Full Address'] || '',
               postCode: row.postCode || row.PostCode || row['Post Code'] || '',
               phone: parseLeadPhoneForStorage(raw) ?? '',
               remarks: row.remarks || row.Remarks || '',
@@ -180,53 +214,60 @@ export default function AdminLeadsPage() {
           ].filter(Boolean)
           setNotification({ message: `${parts.join('. ')}.`, type: 'success' })
           fetchData()
-        } catch (parseErr: any) {
+      } catch (parseErr: any) {
           setNotification({
             message: parseErr?.message ?? 'Failed to parse file',
             type: 'warn',
           })
-        } finally {
-          setUploading(false)
-        }
       }
-      reader.readAsArrayBuffer(file)
     } catch (err: any) {
       setNotification({ message: err.message, type: 'warn' })
+    } finally {
       setUploading(false)
     }
   }
 
   const handleAssign = async () => {
-    if (selectedLeads.size === 0 || !selectedEmployeeId) return
+    if (selectedLeads.size === 0 || !selectedEmployeeId || assigning) return
+    setAssigning(true)
     try {
       const res = await fetch('/api/admin/leads', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadIds: Array.from(selectedLeads), assignedToId: selectedEmployeeId })
       })
+      const payload = await res.json().catch(() => ({}))
       if (res.ok) {
         setSelectedLeads(new Set())
         fetchData()
-        setNotification({ message: 'Leads assigned successfully', type: 'success' })
+        setNotification({ message: `Leads assigned successfully (${payload.updatedCount ?? selectedLeads.size})`, type: 'success' })
+      } else {
+        setNotification({ message: payload.error || 'Failed to assign leads', type: 'warn' })
       }
     } catch (e) { console.error(e) }
+    finally { setAssigning(false) }
   }
 
   const handleDelete = async () => {
-    if (selectedLeads.size === 0) return
+    if (selectedLeads.size === 0 || deleting) return
     if (!confirm(`Delete ${selectedLeads.size} leads?`)) return
+    setDeleting(true)
     try {
       const res = await fetch('/api/admin/leads', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadIds: Array.from(selectedLeads) })
       })
+      const payload = await res.json().catch(() => ({}))
       if (res.ok) {
         setSelectedLeads(new Set())
         fetchData()
-        setNotification({ message: 'Leads deleted', type: 'success' })
+        setNotification({ message: `Leads deleted (${payload.deletedCount ?? 0})`, type: 'success' })
+      } else {
+        setNotification({ message: payload.error || 'Failed to delete leads', type: 'warn' })
       }
     } catch (e) { console.error(e) }
+    finally { setDeleting(false) }
   }
 
   const toggleSelect = (id: string) => {
@@ -327,7 +368,7 @@ export default function AdminLeadsPage() {
               <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-lg p-1">
                 <button 
                   onClick={handleDelete}
-                  disabled={selectedLeads.size === 0}
+                  disabled={selectedLeads.size === 0 || deleting}
                   className="bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/20 disabled:opacity-30 px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> DELETE
@@ -360,7 +401,7 @@ export default function AdminLeadsPage() {
                 <button disabled={uploading} className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 border border-neutral-700">
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} UPLOAD
                 </button>
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" disabled={uploading} />
+                <input type="file" accept=".xlsx,.csv" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" disabled={uploading} />
               </div>
               
               <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-lg p-1">
@@ -368,7 +409,7 @@ export default function AdminLeadsPage() {
                   <option value="">EMPLOYEE...</option>
                   {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
-                <button onClick={handleAssign} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-xs font-bold">ASSIGN ({selectedLeads.size})</button>
+                <button onClick={handleAssign} disabled={assigning} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-xs font-bold">ASSIGN ({selectedLeads.size})</button>
               </div>
             </div>
           </div>
@@ -384,6 +425,7 @@ export default function AdminLeadsPage() {
                   <th className="p-4">Title</th>
                   <th className="p-4">First Name</th>
                   <th className="p-4">Last Name</th>
+                  <th className="p-4">Email</th>
                   <th className="p-4">Phone</th>
                   <th className="p-4 text-center">Emp.</th>
                   <th className="p-4 text-center text-amber-500">Adv.</th>
@@ -395,9 +437,9 @@ export default function AdminLeadsPage() {
               </thead>
               <tbody className="divide-y divide-neutral-800/50">
                 {loading ? (
-                   <tr><td colSpan={12} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></td></tr>
+                   <tr><td colSpan={13} className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></td></tr>
                 ) : filteredLeads.length === 0 ? (
-                  <tr><td colSpan={12} className="p-8 text-center text-neutral-500 uppercase font-bold text-xs">No leads found</td></tr>
+                  <tr><td colSpan={13} className="p-8 text-center text-neutral-500 uppercase font-bold text-xs">No leads found</td></tr>
                 ) : (
                   paginatedLeads.map(lead => (
                     <motion.tr key={lead.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`hover:bg-neutral-800/30 transition-colors ${expandedId === lead.id ? 'bg-neutral-800/20' : ''}`}>
@@ -406,6 +448,7 @@ export default function AdminLeadsPage() {
                       <td className="p-4 text-neutral-400 text-xs">{lead.title || '-'}</td>
                       <td className="p-4 font-bold text-white">{lead.firstName}</td>
                       <td className="p-4 text-neutral-300">{lead.lastName || '-'}</td>
+                      <td className="p-4 text-neutral-300 normal-case">{lead.email || '-'}</td>
                       <td className="p-4 font-mono text-xs">
                         <div className="flex items-center gap-2">{lead.phone}<button onClick={() => { navigator.clipboard.writeText(lead.phone); setNotification({ message: 'COPIED', type: 'success' }); setTimeout(() => setNotification(null), 1000); }}><Copy className="w-3 h-3 text-neutral-600 hover:text-white" /></button></div>
                       </td>
@@ -450,7 +493,23 @@ export default function AdminLeadsPage() {
                 </div>
                 <div className="space-y-6">
                   <div><p className="text-[10px] text-neutral-500 uppercase font-black mb-1">ASSIGNED AGENT</p><p className="text-white font-bold">{leads.find(l => l.id === expandedId)?.assignedTo?.name || 'NONE'}</p></div>
-                  <div><p className="text-[10px] text-neutral-500 uppercase font-black mb-1">ADDRESS</p><p className="text-white text-sm leading-relaxed">{leads.find(l => l.id === expandedId)?.address || '-'}<br/>{leads.find(l => l.id === expandedId)?.postCode}</p></div>
+                  <div>
+                    <p className="text-[10px] text-neutral-500 uppercase font-black mb-1">EMAIL</p>
+                    <p className="text-white text-sm normal-case">{leads.find(l => l.id === expandedId)?.email || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-neutral-500 uppercase font-black mb-1">ADDRESS</p>
+                    <p className="text-white text-sm leading-relaxed normal-case">
+                      {[
+                        leads.find(l => l.id === expandedId)?.addressLine1,
+                        leads.find(l => l.id === expandedId)?.addressLine2,
+                        leads.find(l => l.id === expandedId)?.addressLine3,
+                        leads.find(l => l.id === expandedId)?.addressLine4,
+                      ].filter(Boolean).join(', ') || leads.find(l => l.id === expandedId)?.address || '-'}
+                      <br />
+                      {leads.find(l => l.id === expandedId)?.postCode || ''}
+                    </p>
+                  </div>
                 </div>
               </div>
             </motion.div>

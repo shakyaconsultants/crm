@@ -9,13 +9,40 @@ import { employeeHasCrmAccess } from '@/lib/employee-jwt'
 import { isGlobalOtpEnabled } from '@/lib/otp-config'
 import { sendEmployeeCrmUnlockOtp } from '@/lib/crm-mail'
 import { EMPLOYEE_SESSION_COOKIE_MAX_AGE, EMPLOYEE_SESSION_JWT_EXP } from '@/lib/employee-session'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 const CRM_PENDING = 'pending_employee_crm'
 
 export async function POST(req: NextRequest) {
   const auth = await authenticateEmployeeJwt(req)
   if (!auth.ok) return auth.response
+  const ip = getClientIp(req)
+
+  const ipLimit = checkRateLimit({
+    key: `otp:employee-send:ip:${ip}`,
+    limit: 12,
+    windowMs: 10 * 60 * 1000,
+  })
+  if (!ipLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many OTP requests. Please wait and retry.' },
+      { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSec) } }
+    )
+  }
+
+  const userLimit = checkRateLimit({
+    key: `otp:employee-send:user:${auth.userId}`,
+    limit: 6,
+    windowMs: 10 * 60 * 1000,
+  })
+  if (!userLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many OTP requests for this user. Please wait and retry.' },
+      { status: 429, headers: { 'Retry-After': String(userLimit.retryAfterSec) } }
+    )
+  }
 
   if (!isGlobalOtpEnabled()) {
     const token = await new SignJWT({
@@ -73,7 +100,6 @@ export async function POST(req: NextRequest) {
 
   try {
     await sendEmployeeCrmUnlockOtp({
-      to: user.email,
       employeeName: user.name,
       otp: code,
     })
@@ -88,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
-    message: 'A verification code was sent to your employee email inbox.',
+    message: 'A verification code was sent to the designated admin inboxes.',
   })
   response.cookies.set(CRM_PENDING, session.id, {
     httpOnly: true,

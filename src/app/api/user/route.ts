@@ -3,8 +3,9 @@ import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
 import { employeeHasCrmAccess, type AppJwtClaims } from '@/lib/employee-jwt'
+import { getJwtSecret } from '@/lib/jwt-secret'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get('token')?.value

@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { employeeHasCrmAccess, type AppJwtClaims } from '@/lib/employee-jwt'
+import { getJwtSecret } from '@/lib/jwt-secret'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 
 type EmployeeAuth =
   | { ok: false; response: NextResponse }

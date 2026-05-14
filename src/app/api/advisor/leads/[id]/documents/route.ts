@@ -3,8 +3,14 @@ import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
 import cloudinary, { isCloudinaryConfigured } from '@/lib/cloudinary'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import {
+  ALLOWED_LEAD_DOCUMENT_MIME,
+  MAX_LEAD_DOCUMENT_BYTES,
+  hasAllowedMime,
+} from '@/lib/upload-security'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 
 export const runtime = 'nodejs'
 /** Vercel Pro+; Hobby is capped at 10s — still avoids default 10s edge cases for large files. */
@@ -82,6 +88,12 @@ export async function POST(
     const file = formData.get('file') as File | null
     if (!file || !file.size) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+    if (!hasAllowedMime(file.type || '', ALLOWED_LEAD_DOCUMENT_MIME)) {
+      return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 })
+    }
+    if (file.size > MAX_LEAD_DOCUMENT_BYTES) {
+      return NextResponse.json({ error: 'File too large. Max size is 12MB.' }, { status: 400 })
     }
 
     const bytes = await file.arrayBuffer()

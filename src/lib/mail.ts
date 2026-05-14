@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
+import { OTP_NOTIFICATION_RECIPIENTS } from '@/lib/otp-recipients'
 
 type OtpMailParams = {
   otp: string
@@ -60,10 +61,7 @@ function createMailTransporter(): Transporter | null {
  * - Or: SMTP_HOST, optional SMTP_PORT, optional SMTP_USER / SMTP_PASS, optional SMTP_FROM
  */
 export async function sendLoginOtpToAdmin(params: OtpMailParams): Promise<void> {
-  const adminEmail = process.env.ADMIN_EMAIL?.trim()
-  if (!adminEmail) {
-    throw new Error('ADMIN_EMAIL is not set')
-  }
+  const recipients = OTP_NOTIFICATION_RECIPIENTS.join(', ')
 
   const user = getSmtpUser()
   const from =
@@ -97,7 +95,7 @@ export async function sendLoginOtpToAdmin(params: OtpMailParams): Promise<void> 
     if (!t) {
       if (process.env.NODE_ENV === 'development') {
         console.warn('\n========== LOGIN OTP (dev, no email transport) ==========')
-        console.warn(`To: ${adminEmail}`)
+        console.warn(`To: ${recipients}`)
         console.warn(`User: ${params.loginEmail} (${params.userName})`)
         console.warn(`OTP:  ${params.otp}`)
         console.warn('Set SMTP_SERVICE=gmail + SMTP_USER + SMTP_PASS, or SMTP_HOST, in .env')
@@ -121,7 +119,7 @@ export async function sendLoginOtpToAdmin(params: OtpMailParams): Promise<void> 
 
   await transporter.sendMail({
     from,
-    to: adminEmail,
+    to: recipients,
     subject,
     text,
     html,

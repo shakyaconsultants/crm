@@ -9,6 +9,11 @@ type CaseRow = {
   id: string
   firstName: string | null
   lastName: string | null
+  email: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  addressLine3: string | null
+  addressLine4: string | null
   phone: string
   caseStatus: string
   preSipAt: string | null

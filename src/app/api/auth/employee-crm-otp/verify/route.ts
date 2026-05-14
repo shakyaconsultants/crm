@@ -5,13 +5,30 @@ import { SignJWT } from 'jose'
 import { db } from '@/lib/db'
 import { authenticateEmployeeJwt } from '@/lib/enforce-employee-auth'
 import { EMPLOYEE_SESSION_COOKIE_MAX_AGE, EMPLOYEE_SESSION_JWT_EXP } from '@/lib/employee-session'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 const CRM_PENDING = 'pending_employee_crm'
+const OTP_MAX_ATTEMPTS = 5
+const crmOtpFailures = new Map<string, number>()
 
 export async function POST(req: NextRequest) {
   const auth = await authenticateEmployeeJwt(req)
   if (!auth.ok) return auth.response
+  const ip = getClientIp(req)
+
+  const rl = checkRateLimit({
+    key: `otp:employee-verify:ip:${ip}`,
+    limit: 20,
+    windowMs: 10 * 60 * 1000,
+  })
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many verification attempts. Please wait and retry.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+    )
+  }
 
   const sessionId = req.cookies.get(CRM_PENDING)?.value
   if (!sessionId) {
@@ -57,9 +74,22 @@ export async function POST(req: NextRequest) {
 
   const ok = await bcrypt.compare(normalized, session.codeHash)
   if (!ok) {
+    const failCount = (crmOtpFailures.get(sessionId) ?? 0) + 1
+    crmOtpFailures.set(sessionId, failCount)
+    if (failCount >= OTP_MAX_ATTEMPTS) {
+      await db.loginOtpSession.delete({ where: { id: sessionId } }).catch(() => {})
+      crmOtpFailures.delete(sessionId)
+      const res = NextResponse.json(
+        { error: 'Too many invalid attempts. Request a new code.' },
+        { status: 429 }
+      )
+      res.cookies.delete(CRM_PENDING)
+      return res
+    }
     return NextResponse.json({ error: 'Invalid code' }, { status: 401 })
   }
 
+  crmOtpFailures.delete(sessionId)
   await db.loginOtpSession.delete({ where: { id: sessionId } })
 
   const token = await new SignJWT({

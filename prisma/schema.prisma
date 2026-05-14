@@ -72,7 +72,12 @@ model Lead {
   title            String?
   firstName        String?
   lastName         String?
+  email            String?
   address          String?
+  addressLine1     String?
+  addressLine2     String?
+  addressLine3     String?
+  addressLine4     String?
   postCode         String?
   phone            String    @unique
   assignedToId     String?   @db.ObjectId

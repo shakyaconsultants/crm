@@ -8,7 +8,7 @@ import Link from 'next/link'
 const ADMIN_NAV_LINKS = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/leads', label: 'Leads' },
-  { href: '/admin/employees', label: 'Team' },
+  { href: '/admin/employees', label: 'Teams' },
   { href: '/admin/payroll', label: 'Payroll' },
   { href: '/admin/leave-requests', label: 'Leave' },
   { href: '/admin/attendance-review', label: 'Attendance' },
@@ -59,6 +59,7 @@ export default function Navigation() {
     crmAccess?: boolean
   } | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const isAdminContext = pathname === '/admin' || pathname.startsWith('/admin/')
 
   useEffect(() => {
     const load = () => {
@@ -90,7 +91,7 @@ export default function Navigation() {
               </div>
               <span className="text-white font-bold text-xl hidden sm:block">Bee CRM</span>
             </Link>
-            {user?.role === 'ADMIN' && (
+            {isAdminContext && (
               <div className="hidden md:flex flex-wrap items-center gap-x-0.5 gap-y-1 ml-0 md:ml-4 pl-0 md:pl-4 md:border-l border-neutral-800 min-w-0">
                 {ADMIN_NAV_LINKS.map((item) => {
                   const active = adminLinkActive(pathname, item.href, 'exact' in item ? item.exact : false)
@@ -197,7 +198,7 @@ export default function Navigation() {
               <LogOut className="w-4 h-4" /> Logout
             </button>
           </div>
-          {user?.role === 'ADMIN' && (
+          {isAdminContext && (
             <div className="px-2 pt-2 pb-3 space-y-0.5">
               <p className="px-3 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Admin</p>
               {ADMIN_NAV_LINKS.map((item) => {

@@ -15,17 +15,11 @@ import {
   CheckCircle,
   TrendingUp,
   ClipboardList,
-  CalendarDays,
-  Plus,
-  Trash2,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRestrictCopy } from '@/hooks/useRestrictCopy'
+import EmployeeIntakeFormEditor from '@/components/employee/EmployeeIntakeFormEditor'
 import {
-  addressHistoryMeetsFiveYears,
-  addressHistoryTotalMonths,
-  DEBT_CREDITOR_TYPES,
-  UK_BANK_OPTIONS,
   hasEmployeeIntakeData,
   parseEmployeeIntakeForm,
   type EmployeeIntakeForm,
@@ -39,7 +33,12 @@ type Lead = {
   title: string | null
   firstName: string | null
   lastName: string | null
+  email: string | null
   address: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  addressLine3: string | null
+  addressLine4: string | null
   postCode: string | null
   phone: string
   disposition: string
@@ -82,6 +81,7 @@ export default function EmployeeCrmPanel() {
     const resolvedName = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim()
     if (!parsed.fullName && resolvedName) parsed.fullName = resolvedName
     if (!parsed.callingNumber && lead.phone) parsed.callingNumber = lead.phone
+    if (!parsed.emailAddress && lead.email) parsed.emailAddress = lead.email
     if (parsed.whatsappSameAsCalling && !parsed.whatsappNumber && parsed.callingNumber) {
       parsed.whatsappNumber = parsed.callingNumber
     }
@@ -173,6 +173,7 @@ export default function EmployeeCrmPanel() {
     return leads.filter(lead => {
       const nameMatch = (lead.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                        (lead.lastName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       (lead.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                        lead.phone.includes(searchTerm)
       const dispositionMatch = filterDisposition === 'All' || lead.disposition === filterDisposition
       return nameMatch && dispositionMatch
@@ -386,6 +387,7 @@ export default function EmployeeCrmPanel() {
                   <th className="p-4 font-medium">Address</th>
                   <th className="p-4 font-medium">Post Code</th>
                   <th className="p-4 font-medium">Phone Number</th>
+                  <th className="p-4 font-medium">Email</th>
                   <th className="p-4 font-medium">Disposition</th>
                   <th className="p-4 font-medium">Callback</th>
                   <th className="p-4 font-medium text-center">Intake form</th>
@@ -395,14 +397,14 @@ export default function EmployeeCrmPanel() {
               <tbody className="divide-y divide-neutral-800/50">
                 {loading ? (
                    <tr>
-                     <td colSpan={11} className="p-8 text-center text-neutral-500">
+                     <td colSpan={12} className="p-8 text-center text-neutral-500">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                         Loading assigned leads...
                      </td>
                    </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-neutral-500">
+                    <td colSpan={12} className="p-8 text-center text-neutral-500">
                       No leads found.
                     </td>
                   </tr>
@@ -438,6 +440,7 @@ export default function EmployeeCrmPanel() {
                       <td className="p-4 font-mono text-neutral-300">
                         <a href={`tel:${lead.phone}`} className="hover:text-blue-400 underline decoration-neutral-700 underline-offset-4">{lead.phone}</a>
                       </td>
+                      <td className="p-4 text-neutral-300 normal-case">{lead.email || '-'}</td>
                       <td className="p-4">
                         <select 
                           value={lead.disposition}
@@ -596,229 +599,7 @@ export default function EmployeeCrmPanel() {
                   </div>
                 </div>
 
-                <div className="space-y-5 text-sm">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Name (from lead)</label>
-                      <input value={formDraft.fullName} onChange={(e) => setFormDraft({ ...formDraft, fullName: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Calling number</label>
-                      <input value={formDraft.callingNumber} onChange={(e) => setFormDraft({ ...formDraft, callingNumber: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                    </div>
-                    <div className="sm:col-span-2 flex items-center gap-2">
-                      <input type="checkbox" checked={formDraft.whatsappSameAsCalling} onChange={(e) => setFormDraft({ ...formDraft, whatsappSameAsCalling: e.target.checked, whatsappNumber: e.target.checked ? formDraft.callingNumber : formDraft.whatsappNumber })} />
-                      <span className="text-xs text-neutral-400">WhatsApp same as calling number</span>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">WhatsApp number</label>
-                      <input value={formDraft.whatsappNumber} disabled={formDraft.whatsappSameAsCalling} onChange={(e) => setFormDraft({ ...formDraft, whatsappNumber: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white disabled:opacity-50" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Email</label>
-                      <input value={formDraft.emailAddress} onChange={(e) => setFormDraft({ ...formDraft, emailAddress: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5 flex items-center gap-1"><CalendarDays className="w-3 h-3" /> DOB</label>
-                      <input type="date" value={formDraft.dateOfBirth} onChange={(e) => setFormDraft({ ...formDraft, dateOfBirth: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Address history + pincode (min 5 years)</span>
-                      <button type="button" onClick={() => setFormDraft({ ...formDraft, addressHistory: [...formDraft.addressHistory, { fullAddress: '', postCode: '', type: 'PREVIOUS', durationMonths: 12 }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add</button>
-                    </div>
-                    <p className={`text-xs ${addressHistoryMeetsFiveYears(formDraft) ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      Total coverage: {addressHistoryTotalMonths(formDraft)} months
-                    </p>
-                    {formDraft.addressHistory.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <input value={row.fullAddress} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, fullAddress: e.target.value } : r) })} placeholder="Address" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input value={row.postCode} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, postCode: e.target.value } : r) })} placeholder="Pincode" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input type="number" min={0} value={row.durationMonths} onChange={(e) => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.map((r, i) => i === idx ? { ...r, durationMonths: Number(e.target.value) || 0 } : r) })} className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <button type="button" onClick={() => setFormDraft({ ...formDraft, addressHistory: formDraft.addressHistory.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Debts</span>
-                      <button type="button" onClick={() => setFormDraft({ ...formDraft, debts: [...formDraft.debts, { creditorType: '', creditorName: '', amount: '', payment: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-                    </div>
-                    {formDraft.debts.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <select value={row.creditorType} onChange={(e) => setFormDraft({ ...formDraft, debts: formDraft.debts.map((d, i) => i === idx ? { ...d, creditorType: e.target.value as typeof row.creditorType } : d) })} className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
-                          <option value="">Creditor type</option>
-                          {DEBT_CREDITOR_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-                        </select>
-                        <input value={row.creditorName} onChange={(e) => setFormDraft({ ...formDraft, debts: formDraft.debts.map((d, i) => i === idx ? { ...d, creditorName: e.target.value } : d) })} placeholder="Creditor name" className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input type="number" min={0} value={row.amount} onChange={(e) => setFormDraft({ ...formDraft, debts: formDraft.debts.map((d, i) => i === idx ? { ...d, amount: e.target.value } : d) })} placeholder="Amount" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input value={row.payment} onChange={(e) => setFormDraft({ ...formDraft, debts: formDraft.debts.map((d, i) => i === idx ? { ...d, payment: e.target.value } : d) })} placeholder="Payment" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <button type="button" onClick={() => setFormDraft({ ...formDraft, debts: formDraft.debts.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-                      </div>
-                    ))}
-                    <p className="text-xs text-emerald-400">
-                      Auto total debt: {formDraft.debts.reduce((sum, d) => sum + (Number(d.amount) || 0), 0).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Living status</label>
-                      <select value={formDraft.livingSituation} onChange={(e) => setFormDraft({ ...formDraft, livingSituation: e.target.value as EmployeeIntakeForm['livingSituation'] })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
-                        <option value="">—</option><option value="PARTNER">Partner</option><option value="ALONE">Single</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Homeowner or tenant</label>
-                      <select value={formDraft.housingStatus} onChange={(e) => {
-                        const housingStatus = e.target.value as EmployeeIntakeForm['housingStatus']
-                        setFormDraft({
-                          ...formDraft,
-                          housingStatus,
-                          rentArrears: housingStatus === 'TENANT' ? formDraft.rentArrears : '',
-                        })
-                      }} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
-                        <option value="">—</option>
-                        <option value="HOMEOWNER">Homeowner</option>
-                        <option value="TENANT">Tenant</option>
-                      </select>
-                    </div>
-                    {formDraft.housingStatus === 'TENANT' ? (
-                      <div>
-                        <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Rent</label>
-                        <input value={formDraft.rentArrears} onChange={(e) => setFormDraft({ ...formDraft, rentArrears: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                      </div>
-                    ) : null}
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Working status</label>
-                      <select value={formDraft.employmentStatus} onChange={(e) => {
-                        const employmentStatus = e.target.value as EmployeeIntakeForm['employmentStatus']
-                        const shouldAskEmploymentDetails =
-                          employmentStatus === 'FT' || employmentStatus === 'PT' || employmentStatus === 'PENSIONER'
-                        setFormDraft({
-                          ...formDraft,
-                          employmentStatus,
-                          employerName: shouldAskEmploymentDetails ? formDraft.employerName : '',
-                          incomeAmount: shouldAskEmploymentDetails ? formDraft.incomeAmount : '',
-                        })
-                      }} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
-                        <option value="">—</option><option value="FT">Full time</option><option value="PT">Part time</option><option value="PENSIONER">Pensioner</option><option value="NOT_WORKING">Not working</option>
-                      </select>
-                    </div>
-                    {formDraft.employmentStatus === 'FT' ||
-                    formDraft.employmentStatus === 'PT' ||
-                    formDraft.employmentStatus === 'PENSIONER' ? (
-                      <>
-                        <div>
-                          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Employer name</label>
-                          <input value={formDraft.employerName} onChange={(e) => setFormDraft({ ...formDraft, employerName: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Income</label>
-                          <input value={formDraft.incomeAmount} onChange={(e) => setFormDraft({ ...formDraft, incomeAmount: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <label className="inline-flex items-center gap-2 text-sm text-neutral-300">
-                      <input
-                        type="checkbox"
-                        checked={formDraft.hasCar}
-                        onChange={(e) => setFormDraft({ ...formDraft, hasCar: e.target.checked })}
-                      />
-                      Owns car?
-                    </label>
-                    {formDraft.hasCar ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input
-                          value={formDraft.carName}
-                          onChange={(e) => setFormDraft({ ...formDraft, carName: e.target.value })}
-                          placeholder="Car name"
-                          className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white"
-                        />
-                        <input
-                          value={formDraft.carRegistrationNumber}
-                          onChange={(e) =>
-                            setFormDraft({ ...formDraft, carRegistrationNumber: e.target.value })
-                          }
-                          placeholder="Reg no"
-                          className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white"
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Benefits (if any)</span>
-                      <button type="button" onClick={() => setFormDraft({ ...formDraft, benefits: [...formDraft.benefits, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-                    </div>
-                    {formDraft.benefits.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <input value={row.name} onChange={(e) => setFormDraft({ ...formDraft, benefits: formDraft.benefits.map((b, i) => i === idx ? { ...b, name: e.target.value } : b) })} placeholder="Benefit name" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input type="number" min={0} value={row.amount} onChange={(e) => setFormDraft({ ...formDraft, benefits: formDraft.benefits.map((b, i) => i === idx ? { ...b, amount: e.target.value } : b) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <button type="button" onClick={() => setFormDraft({ ...formDraft, benefits: formDraft.benefits.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Expenses (predefined)</span>
-                    </div>
-                    {formDraft.expensesPreset.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <input value={row.name} readOnly className="sm:col-span-7 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-300" />
-                        <input type="number" min={0} value={row.amount} onChange={(e) => setFormDraft({ ...formDraft, expensesPreset: formDraft.expensesPreset.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Extra expenses</span>
-                      <button type="button" onClick={() => setFormDraft({ ...formDraft, expensesExtra: [...formDraft.expensesExtra, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-                    </div>
-                    {formDraft.expensesExtra.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <input value={row.name} onChange={(e) => setFormDraft({ ...formDraft, expensesExtra: formDraft.expensesExtra.map((x, i) => i === idx ? { ...x, name: e.target.value } : x) })} placeholder="Expense name" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input type="number" min={0} value={row.amount} onChange={(e) => setFormDraft({ ...formDraft, expensesExtra: formDraft.expensesExtra.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <button type="button" onClick={() => setFormDraft({ ...formDraft, expensesExtra: formDraft.expensesExtra.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Children DOB</span>
-                      <button type="button" onClick={() => setFormDraft({ ...formDraft, children: [...formDraft.children, { name: '', dob: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-                    </div>
-                    {formDraft.children.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                        <input value={row.name} onChange={(e) => setFormDraft({ ...formDraft, children: formDraft.children.map((c, i) => i === idx ? { ...c, name: e.target.value } : c) })} placeholder="Child name" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <input type="date" value={row.dob} onChange={(e) => setFormDraft({ ...formDraft, children: formDraft.children.map((c, i) => i === idx ? { ...c, dob: e.target.value } : c) })} className="sm:col-span-4 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                        <button type="button" onClick={() => setFormDraft({ ...formDraft, children: formDraft.children.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Banking (UK banks)</label>
-                    <input list="uk-banks" value={formDraft.bankNames} onChange={(e) => setFormDraft({ ...formDraft, bankNames: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" placeholder="Select or type bank names" />
-                    <datalist id="uk-banks">
-                      {UK_BANK_OPTIONS.map((bank) => (
-                        <option key={bank} value={bank} />
-                      ))}
-                    </datalist>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Notes</label>
-                    <textarea value={formDraft.internalNotes} onChange={(e) => setFormDraft({ ...formDraft, internalNotes: e.target.value })} rows={3} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-                  </div>
-                </div>
+                <EmployeeIntakeFormEditor form={formDraft} setForm={setFormDraft} />
 
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-6 pt-4 border-t border-neutral-800">
                   <span className="text-[10px] text-neutral-500">

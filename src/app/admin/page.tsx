@@ -7,9 +7,7 @@ import {
   PhoneCall,
   Users,
   ArrowRightLeft,
-  DollarSign,
   CheckCircle2,
-  CreditCard,
   Activity,
   Trophy,
   Clock,
@@ -25,8 +23,8 @@ type AdvisorPerformanceRow = {
   id: string
   name: string
   email: string
-  inQueue: number
-  linkedTotal: number
+  transferredFromEmployee: number
+  forwardedToCaseAssessor: number
   verified: number
   dropped: number
   clawback: number
@@ -88,10 +86,10 @@ export default function AdminDashboard() {
   const stats = [
     { name: 'Total Leads Pool', value: metrics?.totalLeads ?? '-', icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { name: 'Active Outbound Calls', value: metrics?.totalCalls ?? '-', icon: PhoneCall, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-    { name: 'Escalated to Advisor', value: metrics?.moveCount ?? '-', icon: ArrowRightLeft, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { name: 'Gross Closed Sales', value: metrics?.closedCount ?? '-', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { name: 'Quality Verified', value: metrics?.verifiedCount ?? '-', icon: CheckCircle2, color: 'text-teal-500', bg: 'bg-teal-500/10' },
-    { name: 'Payments Processed', value: metrics?.paymentCount ?? '-', icon: CreditCard, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { name: 'Forwarded to Advisor', value: metrics?.moveCount ?? '-', icon: ArrowRightLeft, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { name: 'Verified', value: metrics?.verifiedCount ?? '-', icon: CheckCircle2, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+    { name: 'Clawbacks', value: metrics?.clawbackCount ?? '-', icon: TrendingUp, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { name: 'Dropped', value: metrics?.droppedCount ?? '-', icon: Trophy, color: 'text-orange-500', bg: 'bg-orange-500/10' },
   ]
 
   return (
@@ -171,7 +169,7 @@ export default function AdminDashboard() {
                 <Briefcase className="w-5 h-5 text-amber-500" /> Advisor performance
               </h2>
               <span className="text-[10px] uppercase tracking-wider text-neutral-500 font-medium">
-                Escalations & outcomes
+                Transfer flow & outcomes
               </span>
             </div>
             <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
@@ -184,8 +182,8 @@ export default function AdminDashboard() {
                   <thead>
                     <tr className="bg-neutral-950/50 border-b border-neutral-800 text-[10px] uppercase tracking-wider text-neutral-500">
                       <th className="p-3 pl-4 font-medium">Advisor</th>
-                      <th className="p-3 font-medium text-center">In queue</th>
-                      <th className="p-3 font-medium text-center">Linked</th>
+                      <th className="p-3 font-medium text-center">Transferred from employee</th>
+                      <th className="p-3 font-medium text-center">Forwarded to case assessor</th>
                       <th className="p-3 font-medium text-center">Verified</th>
                       <th className="p-3 font-medium text-center">Dropped</th>
                       <th className="p-3 font-medium text-center pr-4">Clawback</th>
@@ -200,8 +198,8 @@ export default function AdminDashboard() {
                             {row.email}
                           </div>
                         </td>
-                        <td className="p-3 text-center font-mono text-amber-400/90">{row.inQueue}</td>
-                        <td className="p-3 text-center font-mono text-neutral-400">{row.linkedTotal}</td>
+                        <td className="p-3 text-center font-mono text-cyan-400/90">{row.transferredFromEmployee}</td>
+                        <td className="p-3 text-center font-mono text-indigo-400">{row.forwardedToCaseAssessor}</td>
                         <td className="p-3 text-center font-mono text-teal-400">{row.verified}</td>
                         <td className="p-3 text-center font-mono font-bold text-amber-400">{row.dropped}</td>
                         <td className="p-3 text-center font-mono font-bold text-rose-400 pr-4">{row.clawback}</td>

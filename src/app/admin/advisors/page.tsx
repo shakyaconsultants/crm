@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Navigation from '@/components/Navigation'
 import AdminDateRangeFilter from '@/components/AdminDateRangeFilter'
-import { Plus, Users, UserPlus, Loader2, Copy, Check, Trash2, Save, ArrowUpRight, Briefcase, Inbox, Link2, BarChart3 } from 'lucide-react'
+import { Plus, Users, UserPlus, Loader2, Copy, Check, Trash2, Save, ArrowUpRight, Briefcase, ArrowRightLeft, UserX, UserCheck, CheckCircle2, ShieldAlert, BarChart3 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays } from 'date-fns'
 
@@ -17,16 +17,20 @@ type User = {
 
 type AdvisorDashboard = {
   advisorCount: number
-  totalInQueues: number
-  totalLinkedLeads: number
+  totalTransferredFromEmployee: number
+  totalForwardedToCaseAssessor: number
+  totalDropped: number
+  totalVerified: number
+  totalClawback: number
   perAdvisor: {
     id: string
     name: string
     email: string
-    inQueue: number
-    linkedTotal: number
+    transferredFromEmployee: number
+    forwardedToCaseAssessor: number
     verified: number
-    closed: number
+    dropped: number
+    clawback: number
   }[]
   range?: { from: string; to: string } | null
 }
@@ -246,39 +250,47 @@ export default function AdminAdvisorsPage() {
             </div>
           ) : dash ? (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
                 {[
                   {
-                    label: 'Advisor seats',
-                    value: dash.advisorCount,
-                    icon: Briefcase,
-                    color: 'text-amber-500',
-                    bg: 'bg-amber-500/10',
-                    sub: 'Active advisor accounts',
+                    label: 'Transferred from employee',
+                    value: dash.totalTransferredFromEmployee,
+                    icon: ArrowRightLeft,
+                    color: 'text-cyan-400',
+                    bg: 'bg-cyan-500/10',
+                    sub: 'Cases moved from employee CRM',
                   },
                   {
-                    label: 'In advisor queues',
-                    value: dash.totalInQueues,
-                    icon: Inbox,
+                    label: 'Dropped',
+                    value: dash.totalDropped,
+                    icon: UserX,
                     color: 'text-amber-400',
                     bg: 'bg-amber-500/10',
-                    sub: 'Escalated & visible on advisor desk',
+                    sub: 'Marked drop / closed',
                   },
                   {
-                    label: 'Linked to any advisor',
-                    value: dash.totalLinkedLeads,
-                    icon: Link2,
-                    color: 'text-blue-400',
-                    bg: 'bg-blue-500/10',
-                    sub: 'All-time assignments',
+                    label: 'Forwarded to case assessor',
+                    value: dash.totalForwardedToCaseAssessor,
+                    icon: UserCheck,
+                    color: 'text-indigo-400',
+                    bg: 'bg-indigo-500/10',
+                    sub: 'Assigned case assessor',
                   },
                   {
-                    label: 'Advisors w/ queue',
-                    value: dash.perAdvisor.filter((p) => p.inQueue > 0).length,
-                    icon: Users,
+                    label: 'Verified',
+                    value: dash.totalVerified,
+                    icon: CheckCircle2,
                     color: 'text-emerald-400',
                     bg: 'bg-emerald-500/10',
-                    sub: 'With active escalations',
+                    sub: 'Verified outcomes',
+                  },
+                  {
+                    label: 'Clawback',
+                    value: dash.totalClawback,
+                    icon: ShieldAlert,
+                    color: 'text-rose-400',
+                    bg: 'bg-rose-500/10',
+                    sub: 'Case status clawback',
                   },
                 ].map((stat) => {
                   const Icon = stat.icon
@@ -304,7 +316,7 @@ export default function AdminAdvisorsPage() {
                 <div className="px-4 py-3 border-b border-neutral-800 bg-neutral-900/80">
                   <h3 className="text-sm font-bold text-white">Workload by advisor</h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    In queue = leads on the advisor desk (escalated). Linked = all leads tied to that advisor.
+                    Consistent flow tracking from employee transfer to final outcomes.
                   </p>
                 </div>
                 <div className="overflow-x-auto">
@@ -312,16 +324,17 @@ export default function AdminAdvisorsPage() {
                     <thead>
                       <tr className="border-b border-neutral-800 text-[10px] uppercase tracking-wider text-neutral-500">
                         <th className="p-3 pl-4">Advisor</th>
-                        <th className="p-3 text-center">In queue</th>
-                        <th className="p-3 text-center">Linked total</th>
+                        <th className="p-3 text-center">Transferred from employee</th>
+                        <th className="p-3 text-center">Forwarded to case assessor</th>
                         <th className="p-3 text-center">Verified</th>
-                        <th className="p-3 text-center pr-4">Drop / closed</th>
+                        <th className="p-3 text-center">Dropped</th>
+                        <th className="p-3 text-center pr-4">Clawback</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800/50">
                       {dash.perAdvisor.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-neutral-500 text-sm">
+                          <td colSpan={6} className="p-6 text-center text-neutral-500 text-sm">
                             No advisors yet. Add an advisor to see workload.
                           </td>
                         </tr>
@@ -332,10 +345,11 @@ export default function AdminAdvisorsPage() {
                               <p className="font-semibold text-white">{row.name}</p>
                               <p className="text-xs text-neutral-500">{row.email}</p>
                             </td>
-                            <td className="p-3 text-center font-mono text-amber-400/90">{row.inQueue}</td>
-                            <td className="p-3 text-center font-mono text-neutral-300">{row.linkedTotal}</td>
-                            <td className="p-3 text-center font-mono text-blue-400/80">{row.verified}</td>
-                            <td className="p-3 text-center font-mono text-emerald-500/80 pr-4">{row.closed}</td>
+                            <td className="p-3 text-center font-mono text-cyan-400/90">{row.transferredFromEmployee}</td>
+                            <td className="p-3 text-center font-mono text-indigo-400">{row.forwardedToCaseAssessor}</td>
+                            <td className="p-3 text-center font-mono text-emerald-400">{row.verified}</td>
+                            <td className="p-3 text-center font-mono text-amber-400">{row.dropped}</td>
+                            <td className="p-3 text-center font-mono text-rose-400 pr-4">{row.clawback}</td>
                           </tr>
                         ))
                       )}

@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import { randomInt } from 'crypto'
 import { sendLoginOtpToAdmin } from '@/lib/mail'
 import { EMPLOYEE_SESSION_COOKIE_MAX_AGE, EMPLOYEE_SESSION_JWT_EXP } from '@/lib/employee-session'
+import { getJwtSecret } from '@/lib/jwt-secret'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET)
+const secret = getJwtSecret()
 const PENDING_COOKIE = 'pending_login'
 
 function buildAuthResponse(user: { id: string; email: string; role: string }) {
@@ -22,13 +25,38 @@ function buildAuthResponse(user: { id: string; email: string; role: string }) {
   return { redirect }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json()
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    const ip = getClientIp(req)
+
+    const ipLimit = checkRateLimit({
+      key: `login:ip:${ip}`,
+      limit: 25,
+      windowMs: 10 * 60 * 1000,
+    })
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSec) } }
+      )
+    }
 
     if (!normalizedEmail || !password) {
       return NextResponse.json({ error: 'Missing email or password' }, { status: 400 })
+    }
+
+    const userLimit = checkRateLimit({
+      key: `login:user:${normalizedEmail}`,
+      limit: 8,
+      windowMs: 10 * 60 * 1000,
+    })
+    if (!userLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts for this account. Please try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(userLimit.retryAfterSec) } }
+      )
     }
 
     const user = await db.user.findUnique({

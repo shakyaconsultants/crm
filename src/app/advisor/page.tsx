@@ -5,6 +5,11 @@ import Navigation from '@/components/Navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Briefcase,
+  ArrowRightLeft,
+  CheckCircle2,
+  ShieldAlert,
+  UserCheck,
+  UserX,
   Loader2,
   ChevronDown,
   ChevronRight,
@@ -27,12 +32,18 @@ type Lead = {
   id: string
   firstName: string | null
   lastName: string | null
+  email: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  addressLine3: string | null
+  addressLine4: string | null
   phone: string
   assignedTo: { name: string } | null
   remarks: string | null
   employeeIntakeForm?: unknown
   closedSale: boolean
   verifiedSale: boolean
+  caseStatus: string | null
   assignedCaseAssessorId: string | null
   preSipAt: string | null
   updatedAt: string
@@ -66,6 +77,7 @@ export default function AdminAdvisorPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [assessors, setAssessors] = useState<CaseAssessorOption[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchWarning, setFetchWarning] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [documentsLeadId, setDocumentsLeadId] = useState<string | null>(null)
@@ -92,10 +104,24 @@ export default function AdminAdvisorPage() {
         fetch('/api/advisor/leads'),
         fetch('/api/advisor/case-assessors'),
       ])
-      const leadsData = await leadsRes.json()
-      const assessorData = await assessorRes.json()
-      if (leadsData.leads) setLeads(leadsData.leads)
-      if (assessorData.assessors) setAssessors(assessorData.assessors)
+      const leadsData = await leadsRes.json().catch(() => ({}))
+      const assessorData = await assessorRes.json().catch(() => ({}))
+
+      const problems: string[] = []
+      if (leadsRes.ok && Array.isArray(leadsData.leads)) setLeads(leadsData.leads)
+      else problems.push('leads')
+      if (assessorRes.ok && Array.isArray(assessorData.assessors)) setAssessors(assessorData.assessors)
+      else problems.push('case assessors')
+
+      if (problems.length > 0) {
+        setFetchWarning(`Temporary connection issue while loading ${problems.join(' and ')}. Retrying automatically.`)
+      } else {
+        setFetchWarning(null)
+      }
+    } catch (error) {
+      // Handle transient browser/network fetch failures gracefully.
+      console.error('Advisor fetchData failed:', error)
+      setFetchWarning('Temporary network issue while loading advisor data. Retrying automatically.')
     } finally {
       setLoading(false)
     }
@@ -124,6 +150,21 @@ export default function AdminAdvisorPage() {
       return nameMatch
     })
   }, [leads, searchTerm])
+
+  const advisorStats = useMemo(() => {
+    const transferredFromEmployee = leads.length
+    const dropped = leads.filter((l) => l.closedSale).length
+    const forwardedToCaseAssessor = leads.filter((l) => !!l.assignedCaseAssessorId).length
+    const verified = leads.filter((l) => l.verifiedSale).length
+    const clawback = leads.filter((l) => l.caseStatus === 'CLAWBACK').length
+    return {
+      transferredFromEmployee,
+      dropped,
+      forwardedToCaseAssessor,
+      verified,
+      clawback,
+    }
+  }, [leads])
 
   const paginatedLeads = useMemo(() => {
     const start = (currentPage - 1) * pageSize
@@ -328,7 +369,7 @@ export default function AdminAdvisorPage() {
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Briefcase className="w-6 h-6 text-amber-500" /> Advisor Desk
             </h1>
-            <p className="text-neutral-400 text-sm mt-1">Manage and close escalated high-priority leads.</p>
+            <p className="text-neutral-400 text-sm mt-1">Manage leads transferred from employees and drive case outcomes.</p>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -341,6 +382,68 @@ export default function AdminAdvisorPage() {
               className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-white select-text"
             />
           </div>
+        </div>
+
+        {fetchWarning ? (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+            {fetchWarning}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+          {[
+            {
+              label: 'Transferred from employee',
+              value: advisorStats.transferredFromEmployee,
+              icon: ArrowRightLeft,
+              color: 'text-cyan-400',
+              bg: 'bg-cyan-500/10',
+            },
+            {
+              label: 'Dropped',
+              value: advisorStats.dropped,
+              icon: UserX,
+              color: 'text-amber-400',
+              bg: 'bg-amber-500/10',
+            },
+            {
+              label: 'Forwarded to case assessor',
+              value: advisorStats.forwardedToCaseAssessor,
+              icon: UserCheck,
+              color: 'text-indigo-400',
+              bg: 'bg-indigo-500/10',
+            },
+            {
+              label: 'Verified',
+              value: advisorStats.verified,
+              icon: CheckCircle2,
+              color: 'text-emerald-400',
+              bg: 'bg-emerald-500/10',
+            },
+            {
+              label: 'Clawback',
+              value: advisorStats.clawback,
+              icon: ShieldAlert,
+              color: 'text-rose-400',
+              bg: 'bg-rose-500/10',
+            },
+          ].map((stat) => {
+            const Icon = stat.icon
+            return (
+              <div
+                key={stat.label}
+                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex items-center gap-3"
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stat.bg}`}>
+                  <Icon className={`w-5 h-5 ${stat.color}`} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white leading-none">{stat.value}</p>
+                  <p className="text-[11px] uppercase tracking-wide text-neutral-500 mt-1">{stat.label}</p>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
@@ -364,7 +467,7 @@ export default function AdminAdvisorPage() {
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-neutral-500">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                      Loading escalations...
+                      Loading leads...
                     </td>
                   </tr>
                 ) : filteredLeads.length === 0 ? (

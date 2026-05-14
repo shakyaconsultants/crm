@@ -4,7 +4,9 @@ import { CalendarDays, Plus, Trash2 } from 'lucide-react'
 import {
   addressHistoryMeetsFiveYears,
   addressHistoryTotalMonths,
+  DEBT_CREDITOR_COMPANIES,
   DEBT_CREDITOR_TYPES,
+  UK_BENEFIT_OPTIONS,
   UK_BANK_OPTIONS,
   type EmployeeIntakeForm,
 } from '@/lib/employee-intake-form'
@@ -15,6 +17,17 @@ type Props = {
 }
 
 export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
+  const bankRows = (form.bankNames || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0)
+
+  const normalizedBanks = bankRows.length > 0 ? bankRows : ['']
+  const setBankRows = (nextRows: string[]) => {
+    const compact = nextRows.map((x) => x.trim()).filter((x) => x.length > 0)
+    setForm({ ...form, bankNames: compact.join(', ') })
+  }
+
   return (
     <div className="space-y-5 text-sm">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -45,21 +58,13 @@ export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
       </div>
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Address history + pincode (min 5 years)</span>
-          <button type="button" onClick={() => setForm({ ...form, addressHistory: [...form.addressHistory, { fullAddress: '', postCode: '', type: 'PREVIOUS', durationMonths: 12 }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add</button>
-        </div>
-        <p className={`text-xs ${addressHistoryMeetsFiveYears(form) ? 'text-emerald-400' : 'text-amber-400'}`}>
-          Total coverage: {addressHistoryTotalMonths(form)} months
-        </p>
-        {form.addressHistory.map((row, idx) => (
-          <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <input value={row.fullAddress} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, fullAddress: e.target.value } : r) })} placeholder="Address" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <input value={row.postCode} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, postCode: e.target.value } : r) })} placeholder="Pincode" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <input type="number" min={0} value={row.durationMonths} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, durationMonths: Number(e.target.value) || 0 } : r) })} className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <button type="button" onClick={() => setForm({ ...form, addressHistory: form.addressHistory.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-          </div>
-        ))}
+        <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Total debts roughly</label>
+        <input
+          value={form.totalDebtAmount}
+          onChange={(e) => setForm({ ...form, totalDebtAmount: e.target.value })}
+          placeholder="Approx total debt"
+          className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white"
+        />
       </div>
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
@@ -69,11 +74,20 @@ export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
         </div>
         {form.debts.map((row, idx) => (
           <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <select value={row.creditorType} onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, creditorType: e.target.value as typeof row.creditorType } : d) })} className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+            <select value={row.creditorType} onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, creditorType: e.target.value as typeof row.creditorType, creditorName: '' } : d) })} className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
               <option value="">Creditor type</option>
               {DEBT_CREDITOR_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
-            <input value={row.creditorName} onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, creditorName: e.target.value } : d) })} placeholder="Creditor name" className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <select
+              value={row.creditorName}
+              onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, creditorName: e.target.value } : d) })}
+              className="sm:col-span-3 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white"
+            >
+              <option value="">Creditor company</option>
+              {(row.creditorType ? DEBT_CREDITOR_COMPANIES[row.creditorType] : []).map((company) => (
+                <option key={company} value={company}>{company}</option>
+              ))}
+            </select>
             <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, amount: e.target.value } : d) })} placeholder="Amount" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
             <input value={row.payment} onChange={(e) => setForm({ ...form, debts: form.debts.map((d, i) => i === idx ? { ...d, payment: e.target.value } : d) })} placeholder="Payment" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
             <button type="button" onClick={() => setForm({ ...form, debts: form.debts.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
@@ -84,7 +98,74 @@ export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
         </p>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Working status</label>
+          <select value={form.employmentStatus} onChange={(e) => {
+            const employmentStatus = e.target.value as EmployeeIntakeForm['employmentStatus']
+            const shouldAskEmploymentDetails =
+              employmentStatus === 'FT' || employmentStatus === 'PT' || employmentStatus === 'PENSIONER'
+            setForm({
+              ...form,
+              employmentStatus,
+              employerName: shouldAskEmploymentDetails ? form.employerName : '',
+              incomeAmount: shouldAskEmploymentDetails ? form.incomeAmount : '',
+            })
+          }} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+            <option value="">—</option><option value="FT">Full time</option><option value="PT">Part time</option><option value="PENSIONER">Pensioner</option><option value="NOT_WORKING">Not working</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Employer name</label>
+          <input value={form.employerName} onChange={(e) => setForm({ ...form, employerName: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Income</label>
+          <input value={form.incomeAmount} onChange={(e) => setForm({ ...form, incomeAmount: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2 rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Benefits</span>
+            <button type="button" onClick={() => setForm({ ...form, benefits: [...form.benefits, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
+          </div>
+          {form.benefits.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+              <select value={row.name} onChange={(e) => setForm({ ...form, benefits: form.benefits.map((b, i) => i === idx ? { ...b, name: e.target.value } : b) })} className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
+                <option value="">Select benefit</option>
+                {UK_BENEFIT_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, benefits: form.benefits.map((b, i) => i === idx ? { ...b, amount: e.target.value } : b) })} placeholder="Amount" className="sm:col-span-4 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+              <button type="button" onClick={() => setForm({ ...form, benefits: form.benefits.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
+            </div>
+          ))}
+        </div>
+
+        <div className="sm:col-span-2 rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Expenses (predefined)</span>
+          </div>
+          {form.expensesPreset.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+              <input value={row.name} readOnly className="sm:col-span-7 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-300" />
+              <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, expensesPreset: form.expensesPreset.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            </div>
+          ))}
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Extra expenses</span>
+            <button type="button" onClick={() => setForm({ ...form, expensesExtra: [...form.expensesExtra, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
+          </div>
+          {form.expensesExtra.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+              <input value={row.name} onChange={(e) => setForm({ ...form, expensesExtra: form.expensesExtra.map((x, i) => i === idx ? { ...x, name: e.target.value } : x) })} placeholder="Expense name" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+              <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, expensesExtra: form.expensesExtra.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+              <button type="button" onClick={() => setForm({ ...form, expensesExtra: form.expensesExtra.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
+            </div>
+          ))}
+        </div>
+
         <div>
           <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Living status</label>
           <select value={form.livingSituation} onChange={(e) => setForm({ ...form, livingSituation: e.target.value as EmployeeIntakeForm['livingSituation'] })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
@@ -112,36 +193,20 @@ export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
             <input value={form.rentArrears} onChange={(e) => setForm({ ...form, rentArrears: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
           </div>
         ) : null}
-        <div>
-          <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Working status</label>
-          <select value={form.employmentStatus} onChange={(e) => {
-            const employmentStatus = e.target.value as EmployeeIntakeForm['employmentStatus']
-            const shouldAskEmploymentDetails =
-              employmentStatus === 'FT' || employmentStatus === 'PT' || employmentStatus === 'PENSIONER'
-            setForm({
-              ...form,
-              employmentStatus,
-              employerName: shouldAskEmploymentDetails ? form.employerName : '',
-              incomeAmount: shouldAskEmploymentDetails ? form.incomeAmount : '',
-            })
-          }} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white">
-            <option value="">—</option><option value="FT">Full time</option><option value="PT">Part time</option><option value="PENSIONER">Pensioner</option><option value="NOT_WORKING">Not working</option>
-          </select>
+      </div>
+
+      <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Children DOB</span>
+          <button type="button" onClick={() => setForm({ ...form, children: [...form.children, { name: '', dob: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
         </div>
-        {form.employmentStatus === 'FT' ||
-        form.employmentStatus === 'PT' ||
-        form.employmentStatus === 'PENSIONER' ? (
-          <>
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Employer name</label>
-              <input value={form.employerName} onChange={(e) => setForm({ ...form, employerName: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Income</label>
-              <input value={form.incomeAmount} onChange={(e) => setForm({ ...form, incomeAmount: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            </div>
-          </>
-        ) : null}
+        {form.children.map((row, idx) => (
+          <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+            <input value={row.name} onChange={(e) => setForm({ ...form, children: form.children.map((c, i) => i === idx ? { ...c, name: e.target.value } : c) })} placeholder="Child name" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <input type="date" value={row.dob} onChange={(e) => setForm({ ...form, children: form.children.map((c, i) => i === idx ? { ...c, dob: e.target.value } : c) })} className="sm:col-span-4 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <button type="button" onClick={() => setForm({ ...form, children: form.children.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
+          </div>
+        ))}
       </div>
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
@@ -175,63 +240,58 @@ export default function EmployeeIntakeFormEditor({ form, setForm }: Props) {
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Benefits (if any)</span>
-          <button type="button" onClick={() => setForm({ ...form, benefits: [...form.benefits, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Address history + pincode (min 5 years)</span>
+          <button type="button" onClick={() => setForm({ ...form, addressHistory: [...form.addressHistory, { fullAddress: '', postCode: '', type: 'PREVIOUS', durationMonths: 12 }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add</button>
         </div>
-        {form.benefits.map((row, idx) => (
+        <p className={`text-xs ${addressHistoryMeetsFiveYears(form) ? 'text-emerald-400' : 'text-amber-400'}`}>
+          Total coverage: {addressHistoryTotalMonths(form)} months
+        </p>
+        {form.addressHistory.map((row, idx) => (
           <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <input value={row.name} onChange={(e) => setForm({ ...form, benefits: form.benefits.map((b, i) => i === idx ? { ...b, name: e.target.value } : b) })} placeholder="Benefit name" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, benefits: form.benefits.map((b, i) => i === idx ? { ...b, amount: e.target.value } : b) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <button type="button" onClick={() => setForm({ ...form, benefits: form.benefits.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
+            <input value={row.fullAddress} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, fullAddress: e.target.value } : r) })} placeholder="Address" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <input value={row.postCode} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, postCode: e.target.value } : r) })} placeholder="Pincode" className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <input type="number" min={0} value={row.durationMonths} onChange={(e) => setForm({ ...form, addressHistory: form.addressHistory.map((r, i) => i === idx ? { ...r, durationMonths: Number(e.target.value) || 0 } : r) })} className="sm:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <button type="button" onClick={() => setForm({ ...form, addressHistory: form.addressHistory.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
           </div>
         ))}
       </div>
 
       <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Expenses (predefined)</span>
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Banking (UK banks)</span>
+          <button
+            type="button"
+            onClick={() => setBankRows([...normalizedBanks, ''])}
+            className="text-xs text-blue-400 inline-flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> Add bank
+          </button>
         </div>
-        {form.expensesPreset.map((row, idx) => (
+        {normalizedBanks.map((bank, idx) => (
           <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <input value={row.name} readOnly className="sm:col-span-7 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-neutral-300" />
-            <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, expensesPreset: form.expensesPreset.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
+            <select
+              value={bank}
+              onChange={(e) => {
+                const next = [...normalizedBanks]
+                next[idx] = e.target.value
+                setBankRows(next)
+              }}
+              className="sm:col-span-10 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white"
+            >
+              <option value="">Select bank</option>
+              {UK_BANK_OPTIONS.map((x) => (
+                <option key={x} value={x}>{x}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setBankRows(normalizedBanks.filter((_, i) => i !== idx))}
+              className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" /> Remove
+            </button>
           </div>
         ))}
-        <div className="flex items-center justify-between pt-2">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Extra expenses</span>
-          <button type="button" onClick={() => setForm({ ...form, expensesExtra: [...form.expensesExtra, { name: '', amount: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-        </div>
-        {form.expensesExtra.map((row, idx) => (
-          <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <input value={row.name} onChange={(e) => setForm({ ...form, expensesExtra: form.expensesExtra.map((x, i) => i === idx ? { ...x, name: e.target.value } : x) })} placeholder="Expense name" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <input type="number" min={0} value={row.amount} onChange={(e) => setForm({ ...form, expensesExtra: form.expensesExtra.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x) })} placeholder="Amount" className="sm:col-span-5 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <button type="button" onClick={() => setForm({ ...form, expensesExtra: form.expensesExtra.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">Children DOB</span>
-          <button type="button" onClick={() => setForm({ ...form, children: [...form.children, { name: '', dob: '' }] })} className="text-xs text-blue-400 inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Add row</button>
-        </div>
-        {form.children.map((row, idx) => (
-          <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-            <input value={row.name} onChange={(e) => setForm({ ...form, children: form.children.map((c, i) => i === idx ? { ...c, name: e.target.value } : c) })} placeholder="Child name" className="sm:col-span-6 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <input type="date" value={row.dob} onChange={(e) => setForm({ ...form, children: form.children.map((c, i) => i === idx ? { ...c, dob: e.target.value } : c) })} className="sm:col-span-4 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" />
-            <button type="button" onClick={() => setForm({ ...form, children: form.children.filter((_, i) => i !== idx) })} className="sm:col-span-2 text-xs text-red-400 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Remove</button>
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <label className="block text-[11px] uppercase tracking-wider text-neutral-500 mb-1.5">Banking (UK banks)</label>
-        <input list="uk-banks-shared-intake" value={form.bankNames} onChange={(e) => setForm({ ...form, bankNames: e.target.value })} className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-white" placeholder="Select or type bank names" />
-        <datalist id="uk-banks-shared-intake">
-          {UK_BANK_OPTIONS.map((bank) => (
-            <option key={bank} value={bank} />
-          ))}
-        </datalist>
       </div>
 
       <div>

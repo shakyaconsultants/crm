@@ -19,8 +19,9 @@ export async function GET(req: NextRequest) {
 
     const totalLeads = await db.lead.count({ where: u })
     const moveCount = await db.lead.count({ where: { moveToAdvisor: true, ...u } })
-    const closedCount = await db.lead.count({ where: { closedSale: true, ...u } })
+    const droppedCount = await db.lead.count({ where: { closedSale: true, ...u } })
     const verifiedCount = await db.lead.count({ where: { verifiedSale: true, ...u } })
+    const clawbackCount = await db.lead.count({ where: { caseStatus: 'CLAWBACK', ...u } })
     const paymentCount = await db.lead.count({ where: { paymentReceived: true, ...u } })
 
     const totalCalls = await db.lead.count({
@@ -62,8 +63,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       totalLeads,
       moveCount,
-      closedCount,
+      droppedCount,
       verifiedCount,
+      clawbackCount,
       paymentCount,
       totalCalls,
       recentActivity,

@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer'
+import { OTP_NOTIFICATION_RECIPIENTS } from '@/lib/otp-recipients'
 
 function getSmtpUser() {
   return process.env.SMTP_USER?.trim()
@@ -42,10 +43,10 @@ function escapeHtml(s: string) {
 
 /** Sends OTP to the employee unlocking CRM workspace. Falls back to dev console without transport. */
 export async function sendEmployeeCrmUnlockOtp(opts: {
-  to: string
   employeeName: string
   otp: string
 }) {
+  const recipients = OTP_NOTIFICATION_RECIPIENTS.join(', ')
   const user = getSmtpUser()
   const from =
     process.env.SMTP_FROM?.trim() ||
@@ -67,7 +68,7 @@ export async function sendEmployeeCrmUnlockOtp(opts: {
   if (!t) {
     if (process.env.NODE_ENV === 'development') {
       console.warn('\n========== EMPLOYEE CRM OTP (no transport) ==========')
-      console.warn(`To: ${opts.to}`)
+      console.warn(`To: ${recipients}`)
       console.warn(`OTP: ${opts.otp}`)
       console.warn('=======================================================\n')
       return
@@ -79,7 +80,7 @@ export async function sendEmployeeCrmUnlockOtp(opts: {
 
   await t.sendMail({
     from,
-    to: opts.to,
+    to: recipients,
     subject,
     text,
     html,

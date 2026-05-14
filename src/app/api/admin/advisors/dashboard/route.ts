@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
 
     const perAdvisor = await Promise.all(
       advisors.map(async (a) => {
-        const inQueue = await db.lead.count({
+        const transferredFromEmployee = await db.lead.count({
           where: { assignedAdvisorId: a.id, moveToAdvisor: true, ...u },
         })
-        const linkedTotal = await db.lead.count({
-          where: { assignedAdvisorId: a.id, ...u },
+        const forwardedToCaseAssessor = await db.lead.count({
+          where: { assignedAdvisorId: a.id, assignedCaseAssessorId: { not: null }, ...u },
         })
         const verified = await db.lead.count({
           where: { assignedAdvisorId: a.id, verifiedSale: true, ...u },
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
           id: a.id,
           name: a.name,
           email: a.email,
-          inQueue,
-          linkedTotal,
+          transferredFromEmployee,
+          forwardedToCaseAssessor,
           verified,
           dropped,
           clawback,
@@ -53,20 +53,27 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    const totalInQueues = perAdvisor.reduce((s, p) => s + p.inQueue, 0)
-    const totalLinkedLeads = await db.lead.count({
-      where: { assignedAdvisorId: { not: null }, ...u },
-    })
+    const totalTransferredFromEmployee = perAdvisor.reduce((s, p) => s + p.transferredFromEmployee, 0)
+    const totalForwardedToCaseAssessor = perAdvisor.reduce((s, p) => s + p.forwardedToCaseAssessor, 0)
+    const totalDropped = perAdvisor.reduce((s, p) => s + p.dropped, 0)
+    const totalVerified = perAdvisor.reduce((s, p) => s + p.verified, 0)
+    const totalClawback = perAdvisor.reduce((s, p) => s + p.clawback, 0)
 
     const perAdvisorSorted = [...perAdvisor].sort(
       (a, b) =>
-        b.verified - a.verified || b.dropped - a.dropped || b.clawback - a.clawback || b.inQueue - a.inQueue
+        b.verified - a.verified ||
+        b.dropped - a.dropped ||
+        b.clawback - a.clawback ||
+        b.forwardedToCaseAssessor - a.forwardedToCaseAssessor
     )
 
     return NextResponse.json({
       advisorCount: advisors.length,
-      totalInQueues,
-      totalLinkedLeads,
+      totalTransferredFromEmployee,
+      totalForwardedToCaseAssessor,
+      totalDropped,
+      totalVerified,
+      totalClawback,
       perAdvisor: perAdvisorSorted,
       range: range
         ? { from: range.gte.toISOString().slice(0, 10), to: range.lte.toISOString().slice(0, 10) }
