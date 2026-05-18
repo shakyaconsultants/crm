@@ -201,6 +201,13 @@ export default function AdminAdvisorPage() {
       return
     }
     const parsed = parseEmployeeIntakeForm(expandedLead.employeeIntakeForm ?? null)
+    const resolvedName = [expandedLead.firstName, expandedLead.lastName].filter(Boolean).join(' ').trim()
+    if (!parsed.fullName && resolvedName) parsed.fullName = resolvedName
+    if (!parsed.callingNumber && expandedLead.phone) parsed.callingNumber = expandedLead.phone
+    if (!parsed.emailAddress && expandedLead.email) parsed.emailAddress = expandedLead.email
+    if (parsed.whatsappSameAsCalling && !parsed.whatsappNumber && parsed.callingNumber) {
+      parsed.whatsappNumber = parsed.callingNumber
+    }
     setIntakeDraft(parsed)
     lastSavedIntake.current = JSON.stringify(parsed)
   }, [expandedLead?.id, expandedLead?.employeeIntakeForm])

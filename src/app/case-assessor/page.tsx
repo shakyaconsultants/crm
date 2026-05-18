@@ -128,7 +128,15 @@ export default function CaseAssessorPage() {
   const openChecklistModal = (lead: Lead) => {
     setChecklistLeadId(lead.id)
     setChecklistDraft(parseCaseChecklist(lead.caseChecklist ?? null))
-    setIntakeDraft(parseEmployeeIntakeForm(lead.employeeIntakeForm ?? null))
+    const parsed = parseEmployeeIntakeForm(lead.employeeIntakeForm ?? null)
+    const resolvedName = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim()
+    if (!parsed.fullName && resolvedName) parsed.fullName = resolvedName
+    if (!parsed.callingNumber && lead.phone) parsed.callingNumber = lead.phone
+    if (!parsed.emailAddress && lead.email) parsed.emailAddress = lead.email
+    if (parsed.whatsappSameAsCalling && !parsed.whatsappNumber && parsed.callingNumber) {
+      parsed.whatsappNumber = parsed.callingNumber
+    }
+    setIntakeDraft(parsed)
   }
   const closeChecklistModal = () => {
     setChecklistLeadId(null)
