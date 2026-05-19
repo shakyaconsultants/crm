@@ -11,6 +11,11 @@ export const LEAD_DISPOSITIONS = [
   'Not connected',
   'Voicemail',
   'Wrong Number',
+  'Low Debts',
+  'No Debts',
+  'Managing Fine',
+  'Have Debts & Hang up',
+  'Already in a plan',
 ] as const
 
 export type LeadDisposition = (typeof LEAD_DISPOSITIONS)[number]
