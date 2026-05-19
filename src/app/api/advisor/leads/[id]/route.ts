@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       remarks?: string | null
       closedSale?: boolean
       verifiedSale?: boolean
+      verifiedAt?: Date | null
       assignedCaseAssessorId?: string | null
       preSipAt?: Date | null
       employeeIntakeForm?: Prisma.InputJsonValue
@@ -40,7 +41,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (body.remarks !== undefined) data.remarks = body.remarks
     if (body.closedSale !== undefined) data.closedSale = body.closedSale
-    if (body.verifiedSale !== undefined) data.verifiedSale = body.verifiedSale
+    if (body.verifiedSale !== undefined) {
+      data.verifiedSale = body.verifiedSale
+      if (body.verifiedSale === true && !existing.verifiedSale) data.verifiedAt = new Date()
+      if (body.verifiedSale === false) data.verifiedAt = null
+    }
     if (body.preSipAt !== undefined) {
       data.preSipAt = body.preSipAt ? new Date(body.preSipAt) : null
     }

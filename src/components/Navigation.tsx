@@ -34,6 +34,8 @@ export default function Navigation() {
   } | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const isAdminContext = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isEmployeeCrm =
+    pathname === '/employee/crm' || pathname.startsWith('/employee/crm/')
 
   useEffect(() => {
     const load = () => {
@@ -59,9 +61,17 @@ export default function Navigation() {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between min-h-16 py-2 md:py-0 md:h-16 md:items-center">
           <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 min-w-0 flex-1">
-            <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="GDF Internationals home">
-              <span className="text-white font-bold text-lg hidden sm:block tracking-tight">GDF Internationals</span>
-              <span className="text-white font-bold text-lg sm:hidden tracking-tight">GDF</span>
+            <Link
+              href="/"
+              className="flex items-center gap-2 shrink-0 group"
+              aria-label="GDF Internationals — back to website"
+            >
+              <span className="text-white font-bold text-lg hidden sm:block tracking-tight group-hover:text-amber-200/90 transition-colors">
+                GDF Internationals
+              </span>
+              <span className="text-white font-bold text-lg sm:hidden tracking-tight group-hover:text-amber-200/90 transition-colors">
+                GDF
+              </span>
             </Link>
             {isAdminContext && (
               <div className="hidden md:flex flex-wrap items-center gap-x-0.5 gap-y-1 ml-0 md:ml-4 pl-0 md:pl-4 md:border-l border-neutral-800 min-w-0">
@@ -93,7 +103,14 @@ export default function Navigation() {
                 <span className="text-amber-500 font-medium">Advisor Workspace</span>
               </div>
             )}
-            {user?.role === 'EMPLOYEE' && (
+            {user?.role === 'EMPLOYEE' && isEmployeeCrm && (
+              <div className="hidden md:flex items-center ml-6 pl-6 border-l border-neutral-800 text-sm">
+                <span className="px-2.5 py-1.5 rounded-md bg-neutral-800 text-white font-medium">
+                  CRM
+                </span>
+              </div>
+            )}
+            {user?.role === 'EMPLOYEE' && !isEmployeeCrm && (
               <div className="hidden md:flex items-center gap-1 ml-6 pl-6 border-l border-neutral-800 text-sm">
                 {[
                   { href: '/employee', label: 'Workspace', exact: true },
@@ -186,7 +203,14 @@ export default function Navigation() {
               })}
             </div>
           )}
-          {user?.role === 'EMPLOYEE' && (
+          {user?.role === 'EMPLOYEE' && isEmployeeCrm && (
+            <div className="px-2 pt-2 pb-3 border-t border-neutral-800">
+              <span className="block px-3 py-2.5 text-sm font-medium rounded-md bg-neutral-800 text-white">
+                CRM
+              </span>
+            </div>
+          )}
+          {user?.role === 'EMPLOYEE' && !isEmployeeCrm && (
             <div className="px-2 pt-2 pb-3 space-y-0.5 border-t border-neutral-800">
               <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Employee</p>
               {[

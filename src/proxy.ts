@@ -31,6 +31,13 @@ export async function proxy(request: NextRequest) {
         : false
 
     if (isPublicPage) {
+      // Marketing site + CRM access stay reachable while logged in (logo / back links)
+      if (
+        request.nextUrl.pathname === '/' ||
+        request.nextUrl.pathname.startsWith('/crm-access')
+      ) {
+        return NextResponse.next()
+      }
       if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url))
       if (role === 'ADVISOR') return NextResponse.redirect(new URL('/advisor', request.url))
       if (role === 'CASE_ASSESSOR') return NextResponse.redirect(new URL('/case-assessor', request.url))

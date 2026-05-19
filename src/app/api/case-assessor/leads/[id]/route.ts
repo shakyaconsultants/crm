@@ -25,6 +25,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const existing = await db.lead.findFirst({
       where: { id, assignedCaseAssessorId: userId },
+      select: {
+        id: true,
+        verifiedSale: true,
+        verifiedAt: true,
+        caseStatus: true,
+        employeeIntakeForm: true,
+      },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -36,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       preSipAt?: Date | null
       employeeIntakeForm?: Prisma.InputJsonValue
       verifiedSale?: boolean
+      verifiedAt?: Date | null
     } = {}
 
     if (body.caseStatus !== undefined) {
@@ -44,6 +52,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       data.caseStatus = body.caseStatus
       data.verifiedSale = body.caseStatus === 'VERIFIED'
+      if (body.caseStatus === 'VERIFIED') {
+        if (!existing.verifiedAt) data.verifiedAt = new Date()
+      } else {
+        data.verifiedAt = null
+      }
     }
 
     if (body.caseChecklist !== undefined) {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Navigation from '@/components/Navigation'
-import Link from 'next/link'
 import {
   Save,
   Loader2,
@@ -187,6 +186,17 @@ export default function EmployeeCrmPanel() {
 
   const totalPages = Math.ceil(filteredLeads.length / pageSize)
 
+  const kpiStats = useMemo(
+    () => ({
+      total: leads.length,
+      dropped: leads.filter((l) => l.closedSale).length,
+      verified: leads.filter((l) => l.verifiedSale).length,
+      clawbacks: leads.filter((l) => l.caseStatus === 'CLAWBACK').length,
+      referred: leads.filter((l) => l.moveToAdvisor || l.assignedAdvisorId).length,
+    }),
+    [leads]
+  )
+
   const toLocalDatetimeInput = (iso: string | null) => {
     if (!iso) return ''
     const dt = new Date(iso)
@@ -267,20 +277,14 @@ export default function EmployeeCrmPanel() {
 
   return (
     <div
-      className="min-h-screen bg-neutral-950 text-neutral-200 select-none"
+      className="h-screen flex flex-col overflow-hidden bg-neutral-950 text-neutral-200 select-none"
       {...restrictCopy}
     >
       <Navigation />
       
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8 gap-6">
+      <main className="flex-1 min-h-0 flex flex-col w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
           <div>
-            <Link
-              href="/employee"
-              className="text-xs text-blue-400 hover:text-blue-300 mb-2 inline-block"
-            >
-              ← Back to workspace
-            </Link>
             <h1 className="text-2xl font-bold text-white">CRM · Assigned leads</h1>
             <p className="text-neutral-400 text-sm mt-1">Calling data, intake forms, and advisor escalation.</p>
           </div>
@@ -316,42 +320,42 @@ export default function EmployeeCrmPanel() {
         </div>
 
         {/* KPI Stats Banner */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
           {[
-            { 
-              label: 'Total Assigned', 
-              value: leads.length, 
-              icon: Users, 
-              color: 'text-blue-500', 
-              bg: 'bg-blue-500/10' 
+            {
+              label: 'Total Assigned',
+              value: kpiStats.total,
+              icon: Users,
+              color: 'text-blue-500',
+              bg: 'bg-blue-500/10',
             },
-            { 
-              label: 'Dropped', 
-              value: leads.filter(l => l.closedSale).length, 
-              icon: TrendingUp, 
-              color: 'text-amber-500', 
-              bg: 'bg-amber-500/10' 
+            {
+              label: 'Dropped',
+              value: kpiStats.dropped,
+              icon: TrendingUp,
+              color: 'text-amber-500',
+              bg: 'bg-amber-500/10',
             },
-            { 
-              label: 'Verified', 
-              value: leads.filter(l => l.verifiedSale).length, 
-              icon: CheckCircle, 
-              color: 'text-emerald-500', 
-              bg: 'bg-emerald-500/10' 
+            {
+              label: 'Verified',
+              value: kpiStats.verified,
+              icon: CheckCircle,
+              color: 'text-emerald-500',
+              bg: 'bg-emerald-500/10',
             },
-            { 
-              label: 'Clawbacks', 
-              value: leads.filter(l => l.caseStatus === 'CLAWBACK').length, 
-              icon: AlertTriangle, 
-              color: 'text-rose-500', 
-              bg: 'bg-rose-500/10' 
+            {
+              label: 'Clawbacks',
+              value: kpiStats.clawbacks,
+              icon: AlertTriangle,
+              color: 'text-rose-500',
+              bg: 'bg-rose-500/10',
             },
-            { 
-              label: 'Referred to Advisor', 
-              value: leads.filter(l => l.moveToAdvisor || l.assignedAdvisorId).length, 
-              icon: AlertTriangle, 
-              color: 'text-blue-500', 
-              bg: 'bg-blue-500/10' 
+            {
+              label: 'Referred to Advisor',
+              value: kpiStats.referred,
+              icon: AlertTriangle,
+              color: 'text-blue-500',
+              bg: 'bg-blue-500/10',
             },
           ].map((stat, i) => {
             const Icon = stat.icon
@@ -361,7 +365,7 @@ export default function EmployeeCrmPanel() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
-                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex items-center gap-4 group hover:border-neutral-700 transition-colors"
+                className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex items-center gap-3 group hover:border-neutral-700 transition-colors"
               >
                 <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
                   <Icon className="w-6 h-6" />
@@ -375,11 +379,11 @@ export default function EmployeeCrmPanel() {
           })}
         </div>
 
-        <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-800 bg-neutral-900/80 text-xs uppercase tracking-wider text-neutral-400">
+        <div className="flex-1 min-h-0 flex flex-col bg-neutral-900/50 border border-neutral-800 rounded-2xl backdrop-blur-sm shadow-xl">
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="min-w-max w-full text-left border-collapse text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-neutral-800 bg-neutral-900 text-xs uppercase tracking-wider text-neutral-400">
                   <th className="p-4 w-10"></th>
                   <th className="p-4 font-medium">Title</th>
                   <th className="p-4 font-medium">First Name</th>
@@ -435,7 +439,7 @@ export default function EmployeeCrmPanel() {
                       <td className="p-4 text-neutral-300">{lead.title || '-'}</td>
                       <td className="p-4 font-medium text-white">{lead.firstName}</td>
                       <td className="p-4 text-neutral-300">{lead.lastName || '-'}</td>
-                      <td className="p-4 text-neutral-400 truncate max-w-[150px]" title={lead.address || ''}>{lead.address || '-'}</td>
+                      <td className="p-4 text-neutral-400 min-w-[12rem] max-w-[20rem] whitespace-normal break-words align-top" title={lead.address || ''}>{lead.address || '-'}</td>
                       <td className="p-4 text-neutral-400">{lead.postCode || '-'}</td>
                       <td className="p-4 font-mono text-neutral-300">
                         <a href={`tel:${lead.phone}`} className="hover:text-blue-400 underline decoration-neutral-700 underline-offset-4">{lead.phone}</a>
@@ -524,7 +528,7 @@ export default function EmployeeCrmPanel() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="bg-neutral-900/80 border-t border-neutral-800 p-4 flex items-center justify-between gap-4">
+            <div className="shrink-0 bg-neutral-900/80 border-t border-neutral-800 p-4 flex items-center justify-between gap-4">
               <div className="text-xs text-neutral-500">
                 Showing {Math.min(filteredLeads.length, (currentPage - 1) * pageSize + 1)} to {Math.min(filteredLeads.length, currentPage * pageSize)} of {filteredLeads.length} leads
               </div>

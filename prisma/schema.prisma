@@ -101,6 +101,7 @@ model Lead {
   moveToAdvisor    Boolean   @default(false)
   closedSale       Boolean   @default(false)
   verifiedSale     Boolean   @default(false)
+  verifiedAt       DateTime?
   paymentReceived  Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

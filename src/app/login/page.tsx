@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import { Loader2, Mail, Lock, Shield, ArrowLeft } from 'lucide-react'
 
 export default function LoginPage() {
@@ -89,8 +90,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-neutral-950 to-neutral-950" />
+    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 relative">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-neutral-950 to-neutral-950" aria-hidden />
+
+      <Link
+        href="/"
+        className="absolute top-6 left-6 z-20 inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to website
+      </Link>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -100,8 +109,8 @@ export default function LoginPage() {
       >
         <div className="bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-2xl p-8 shadow-2xl">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-              Bee CRM
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-300 to-amber-500 bg-clip-text text-transparent">
+              GDF Internationals
             </h1>
             <p className="text-neutral-400 mt-2">
               {step === 'credentials'
