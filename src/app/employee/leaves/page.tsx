@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Navigation from '@/components/Navigation'
-import { Loader2, Calendar, Clock } from 'lucide-react'
+import { Loader2, Calendar, Clock, PlusCircle } from 'lucide-react'
 
 type LeaveRow = {
   id: string
@@ -31,6 +31,12 @@ export default function LeavesPage() {
   const [leaves, setLeaves] = useState<LeaveRow[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [leaveStart, setLeaveStart] = useState('')
+  const [leaveEnd, setLeaveEnd] = useState('')
+  const [leaveReason, setLeaveReason] = useState('')
+  const [leaveBusy, setLeaveBusy] = useState(false)
+  const [leaveMsg, setLeaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -45,6 +51,25 @@ export default function LeavesPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  const submitLeave = async () => {
+    setLeaveMsg(null)
+    if (!leaveStart || !leaveEnd) { setLeaveMsg({ type: 'err', text: 'Select start and end dates.' }); return }
+    setLeaveBusy(true)
+    try {
+      const res = await fetch('/api/employee/leave-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate: leaveStart, endDate: leaveEnd, reason: leaveReason || undefined }),
+      })
+      if (!res.ok) { setLeaveMsg({ type: 'err', text: 'Could not submit leave.' }); return }
+      setLeaveMsg({ type: 'ok', text: 'Leave request submitted.' })
+      setLeaveStart(''); setLeaveEnd(''); setLeaveReason('')
+      void load()
+    } finally {
+      setLeaveBusy(false)
+    }
+  }
 
   const approved = leaves.filter((l) => l.status === 'APPROVED')
   const pending = leaves.filter((l) => l.status === 'PENDING')
@@ -74,6 +99,60 @@ export default function LeavesPage() {
           ))}
         </div>
 
+        {/* Apply leave */}
+        <section className="rounded-2xl border border-white/[0.06] bg-neutral-900/75 backdrop-blur-sm p-5 sm:p-6 ring-1 ring-white/[0.04] shadow-lg shadow-black/15">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/25">
+              <PlusCircle className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Apply for leave</h2>
+              <p className="text-xs text-neutral-500">Submit in advance — admin approval required.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Start date</label>
+              <input
+                type="date"
+                value={leaveStart}
+                onChange={(e) => setLeaveStart(e.target.value)}
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2 text-white text-sm focus:border-emerald-500/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">End date</label>
+              <input
+                type="date"
+                value={leaveEnd}
+                onChange={(e) => setLeaveEnd(e.target.value)}
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2 text-white text-sm focus:border-emerald-500/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Reason (optional)</label>
+              <input
+                value={leaveReason}
+                onChange={(e) => setLeaveReason(e.target.value)}
+                placeholder="Short note for admin"
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2 text-sm text-white placeholder-neutral-600 focus:border-emerald-500/35 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+              />
+            </div>
+          </div>
+          {leaveMsg && (
+            <p className={`mt-2 text-xs ${leaveMsg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>{leaveMsg.text}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => void submitLeave()}
+            disabled={leaveBusy || !leaveStart || !leaveEnd}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40 transition-colors"
+          >
+            {leaveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Submit leave request
+          </button>
+        </section>
+
         {/* Full list */}
         <section className="rounded-2xl border border-white/[0.06] bg-neutral-900/70 backdrop-blur-sm p-5 sm:p-6 ring-1 ring-white/[0.04] shadow-lg shadow-black/20">
           <div className="flex items-center gap-3 mb-5">
@@ -89,8 +168,7 @@ export default function LeavesPage() {
             </div>
           ) : leaves.length === 0 ? (
             <div className="text-center py-12 text-neutral-600 text-sm">
-              No leave requests yet. Apply on the{' '}
-              <a href="/employee/attendance" className="text-emerald-500 hover:underline">Attendance page</a>.
+              No leave requests yet. Use the form above to apply.
             </div>
           ) : (
             <div className="space-y-3">
