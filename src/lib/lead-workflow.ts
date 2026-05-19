@@ -5,6 +5,12 @@ export const LEAD_DISPOSITIONS = [
   'Not Interested',
   'No Answer',
   'Callback',
+  'Busy',
+  'Line Irresponsive',
+  'Switch Off',
+  'Not connected',
+  'Voicemail',
+  'Wrong Number',
 ] as const
 
 export type LeadDisposition = (typeof LEAD_DISPOSITIONS)[number]
