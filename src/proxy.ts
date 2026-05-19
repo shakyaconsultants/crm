@@ -10,9 +10,13 @@ export async function proxy(request: NextRequest) {
 
   const adminOtpConfigured = !!(process.env.ADMIN_EMAIL ?? '').trim()
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
+  const isPublicPage =
+    isAuthPage ||
+    request.nextUrl.pathname === '/' ||
+    request.nextUrl.pathname.startsWith('/crm-access')
 
   if (!token) {
-    if (!isAuthPage && request.nextUrl.pathname !== '/') {
+    if (!isPublicPage) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
     return NextResponse.next()
@@ -26,8 +30,10 @@ export async function proxy(request: NextRequest) {
         ? (payload as { crm: boolean }).crm
         : false
 
-    if (isAuthPage) {
+    if (isPublicPage) {
       if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url))
+      if (role === 'ADVISOR') return NextResponse.redirect(new URL('/advisor', request.url))
+      if (role === 'CASE_ASSESSOR') return NextResponse.redirect(new URL('/case-assessor', request.url))
       return NextResponse.redirect(new URL('/employee', request.url))
     }
 

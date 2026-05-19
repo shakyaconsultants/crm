@@ -162,16 +162,25 @@ export default function LandingPage() {
             ))}
           </div>
 
-          {/* Login CTA */}
+          {/* CTAs */}
           <div className="hidden md:flex items-center gap-3">
             <Link
               href="/login"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
+              style={{ color: 'rgba(255,255,255,0.7)', backgroundColor: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)' }}
+            >
+              Team Login
+            </Link>
+            <Link
+              href="/crm-access"
               className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
               style={{ border: '1.5px solid rgba(245,194,107,0.5)', color: '#F5C26B', backgroundColor: 'transparent' }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(245,194,107,0.1)'; e.currentTarget.style.borderColor = '#F5C26B' }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = 'rgba(245,194,107,0.5)' }}
             >
-              Team Login <ArrowRight size={14} />
+              CRM Access <ArrowRight size={14} />
             </Link>
           </div>
 
@@ -207,12 +216,20 @@ export default function LandingPage() {
               </a>
             ))}
             <Link
-              href="/login"
+              href="/crm-access"
               onClick={closeMobile}
               className="mt-6 flex items-center justify-center gap-2 py-4 rounded-lg font-semibold text-base"
               style={{ backgroundColor: '#F5C26B', color: '#000' }}
             >
-              Team Login <ArrowRight size={16} />
+              CRM Access <ArrowRight size={16} />
+            </Link>
+            <Link
+              href="/login"
+              onClick={closeMobile}
+              className="flex items-center justify-center gap-2 py-4 rounded-lg font-semibold text-base mt-2"
+              style={{ border: '1.5px solid rgba(245,194,107,0.4)', color: '#F5C26B', backgroundColor: 'transparent' }}
+            >
+              Team Login
             </Link>
           </div>
         </div>
@@ -431,13 +448,13 @@ export default function LandingPage() {
               <Mail size={18} /> Email Us
             </a>
             <Link
-              href="/login"
+              href="/crm-access"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg text-base font-semibold transition-all duration-200"
               style={{ border: '1.5px solid rgba(245,194,107,0.5)', color: '#F5C26B', backgroundColor: 'transparent' }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(245,194,107,0.1)' }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
             >
-              Team Login <ArrowRight size={16} />
+              CRM Access <ArrowRight size={16} />
             </Link>
           </div>
 

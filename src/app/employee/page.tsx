@@ -17,6 +17,9 @@ import {
   Users,
   Calendar,
   ClipboardList,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
@@ -58,7 +61,6 @@ function HubContent() {
   const crmLocked = searchParams.get('crm_locked') === '1'
 
   const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([])
-  const [crmAccess, setCrmAccess] = useState(false)
 
   const [leaves, setLeaves] = useState<LeaveRow[]>([])
   const [attMonth, setAttMonth] = useState(() => {
@@ -76,9 +78,13 @@ function HubContent() {
   const [attKind, setAttKind] = useState<'FULL_DAY' | 'HALF_DAY'>('FULL_DAY')
   const [attBusy, setAttBusy] = useState(false)
 
-  const [crmMsg, setCrmMsg] = useState('')
-  const [crmOtp, setCrmOtp] = useState('')
-  const [crmBusy, setCrmBusy] = useState(false)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [pwShowCurrent, setPwShowCurrent] = useState(false)
+  const [pwShowNew, setPwShowNew] = useState(false)
 
   const load = useCallback(async () => {
     const [boardRes, userRes, leavesRes, attRes] = await Promise.all([
@@ -91,10 +97,8 @@ function HubContent() {
       const j = await boardRes.json()
       if (Array.isArray(j.leaderboard)) setLeaderboard(j.leaderboard)
     }
-    if (userRes.ok) {
-      const j = await userRes.json()
-      const u = j.user
-      if (u?.role === 'EMPLOYEE') setCrmAccess(!!u.crmAccess)
+    if (!userRes.ok) {
+      // user fetch is optional for workspace display
     }
 
     if (leavesRes.ok) {
@@ -113,38 +117,24 @@ function HubContent() {
     return () => clearInterval(t)
   }, [load])
 
-  const sendCrmOtp = async () => {
-    setCrmBusy(true)
-    setCrmMsg('')
+  const changePassword = async () => {
+    setPwMsg(null)
+    if (!pwCurrent || !pwNew) { setPwMsg({ type: 'err', text: 'Fill in all fields.' }); return }
+    if (pwNew.length < 8) { setPwMsg({ type: 'err', text: 'New password must be at least 8 characters.' }); return }
+    if (pwNew !== pwConfirm) { setPwMsg({ type: 'err', text: 'New passwords do not match.' }); return }
+    setPwBusy(true)
     try {
-      const res = await fetch('/api/auth/employee-crm-otp/send', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setCrmMsg(typeof data.error === 'string' ? data.error : 'Could not send CRM code.')
-        return
-      }
-      setCrmMsg(data.message || 'Code sent.')
-    } finally {
-      setCrmBusy(false)
-    }
-  }
-
-  const verifyCrmOtp = async () => {
-    setCrmBusy(true)
-    try {
-      const res = await fetch('/api/auth/employee-crm-otp/verify', {
+      const res = await fetch('/api/employee/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: crmOtp.replace(/\s/g, '') }),
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setCrmMsg(typeof data.error === 'string' ? data.error : 'Invalid code')
-        return
-      }
-      window.location.href = '/employee/crm'
+      if (!res.ok) { setPwMsg({ type: 'err', text: data.error || 'Could not update password.' }); return }
+      setPwMsg({ type: 'ok', text: 'Password updated successfully.' })
+      setPwCurrent(''); setPwNew(''); setPwConfirm('')
     } finally {
-      setCrmBusy(false)
+      setPwBusy(false)
     }
   }
 
@@ -208,7 +198,11 @@ function HubContent() {
           >
             <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden />
             <p className="text-sm text-amber-100/90 leading-relaxed">
-              CRM is locked until you enter the verification code emailed to you. Send a code and unlock below.
+              CRM access requires a separate login.{' '}
+              <a href="/crm-access" className="underline font-semibold text-amber-300 hover:text-amber-200">
+                Use CRM Access here
+              </a>
+              .
             </p>
           </div>
         ) : null}
@@ -299,58 +293,99 @@ function HubContent() {
         </section>
 
         <section className="rounded-2xl border border-white/[0.06] bg-neutral-900/75 backdrop-blur-sm p-6 sm:p-7 ring-1 ring-white/[0.04] shadow-lg shadow-black/15">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex gap-4 min-w-0">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 ring-1 ring-blue-500/20">
                 <Shield className="w-5 h-5 text-blue-400" aria-hidden />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">CRM &amp; calling</h2>
-                <p className="text-sm text-neutral-500 mt-1 max-w-xl leading-relaxed">
-                  Your password unlocks this page. CRM may ask for a one-time code emailed to you when enabled by admin.
+                <p className="text-sm text-neutral-500 mt-1 leading-relaxed">
+                  Access your leads and calling panel. Use your CRM credentials to log in separately.
                 </p>
               </div>
             </div>
-            {crmAccess ? (
-              <Link
-                href="/employee/crm"
-                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition-colors"
-              >
-                Open CRM
-              </Link>
-            ) : (
-              <div className="flex flex-col sm:flex-row flex-wrap gap-2 lg:justify-end lg:max-w-md w-full">
-                <button
-                  type="button"
-                  onClick={() => void sendCrmOtp()}
-                  disabled={crmBusy}
-                  className="rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 transition-colors shadow-md shadow-black/20"
-                >
-                  Send code to email
-                </button>
-                <input
-                  value={crmOtp}
-                  onChange={(e) => setCrmOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  inputMode="numeric"
-                  placeholder="••••••"
-                  autoComplete="one-time-code"
-                  className="min-w-[7rem] flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2.5 text-center text-base text-white tracking-[0.35em] font-mono focus:border-blue-500/45 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  maxLength={6}
-                />
-                <button
-                  type="button"
-                  onClick={() => void verifyCrmOtp()}
-                  disabled={crmBusy || crmOtp.length !== 6}
-                  className="rounded-xl border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 transition-colors"
-                >
-                  Unlock CRM
-                </button>
-              </div>
-            )}
+            <a
+              href="/crm-access"
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition-colors"
+            >
+              Open CRM
+            </a>
           </div>
-          {crmMsg ? (
-            <p className="mt-4 text-xs text-neutral-400 border-t border-neutral-800/80 pt-4">{crmMsg}</p>
-          ) : null}
+        </section>
+
+        {/* Change Password */}
+        <section className="rounded-2xl border border-white/[0.06] bg-neutral-900/75 backdrop-blur-sm p-6 sm:p-7 ring-1 ring-white/[0.04] shadow-lg shadow-black/15">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
+              <KeyRound className="w-5 h-5 text-violet-400" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Change password</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">Update your workspace login password.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative">
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Current password</label>
+              <input
+                type={pwShowCurrent ? 'text' : 'password'}
+                value={pwCurrent}
+                onChange={(e) => setPwCurrent(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2.5 pr-9 text-sm text-white focus:border-violet-500/35 focus:outline-none focus:ring-2 focus:ring-violet-500/15"
+              />
+              <button
+                type="button"
+                onClick={() => setPwShowCurrent((v) => !v)}
+                className="absolute right-2.5 top-[2.1rem] text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                {pwShowCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <div className="relative">
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">New password</label>
+              <input
+                type={pwShowNew ? 'text' : 'password'}
+                value={pwNew}
+                onChange={(e) => setPwNew(e.target.value)}
+                placeholder="Min 8 characters"
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2.5 pr-9 text-sm text-white focus:border-violet-500/35 focus:outline-none focus:ring-2 focus:ring-violet-500/15"
+              />
+              <button
+                type="button"
+                onClick={() => setPwShowNew((v) => !v)}
+                className="absolute right-2.5 top-[2.1rem] text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                {pwShowNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">Confirm new password</label>
+              <input
+                type="password"
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+                placeholder="Repeat new password"
+                onKeyDown={(e) => e.key === 'Enter' && void changePassword()}
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-950/80 px-3 py-2.5 text-sm text-white focus:border-violet-500/35 focus:outline-none focus:ring-2 focus:ring-violet-500/15"
+              />
+            </div>
+          </div>
+          {pwMsg && (
+            <p className={`mt-3 text-xs ${pwMsg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>
+              {pwMsg.text}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void changePassword()}
+            disabled={pwBusy || !pwCurrent || !pwNew || !pwConfirm}
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40 transition-colors"
+          >
+            {pwBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Update password
+          </button>
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
