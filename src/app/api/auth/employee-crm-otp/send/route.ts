@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import { randomInt } from 'crypto'
 import { db } from '@/lib/db'
@@ -8,11 +7,11 @@ import { authenticateEmployeeJwt } from '@/lib/enforce-employee-auth'
 import { employeeHasCrmAccess } from '@/lib/employee-jwt'
 import { isGlobalOtpEnabled } from '@/lib/otp-config'
 import { sendEmployeeCrmUnlockOtp } from '@/lib/crm-mail'
-import { EMPLOYEE_SESSION_COOKIE_MAX_AGE, EMPLOYEE_SESSION_JWT_EXP } from '@/lib/employee-session'
-import { getJwtSecret } from '@/lib/jwt-secret'
+import {
+  setCrmSessionCookie,
+  signCrmSessionJwt,
+} from '@/lib/employee-crm-session'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
-
-const secret = getJwtSecret()
 const CRM_PENDING = 'pending_employee_crm'
 
 export async function POST(req: NextRequest) {
@@ -45,23 +44,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (!isGlobalOtpEnabled()) {
-    const token = await new SignJWT({
-      id: auth.userId,
-      email: auth.payload.email,
-      role: 'EMPLOYEE',
-      crm: true,
+    const user = await db.user.findUnique({
+      where: { id: auth.userId },
+      select: { id: true, email: true },
     })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime(EMPLOYEE_SESSION_JWT_EXP)
-      .sign(secret)
-    const response = NextResponse.json({ success: true, unlocked: true, message: 'CRM already available (OTP disabled).' })
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: EMPLOYEE_SESSION_COOKIE_MAX_AGE,
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 401 })
+    }
+    const crmJwt = await signCrmSessionJwt({ id: user.id, email: user.email })
+    const response = NextResponse.json({
+      success: true,
+      unlocked: true,
+      message: 'CRM already available (OTP disabled).',
     })
+    setCrmSessionCookie(response, crmJwt)
     return response
   }
 

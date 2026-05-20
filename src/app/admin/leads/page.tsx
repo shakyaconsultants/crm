@@ -8,6 +8,7 @@ import Papa from 'papaparse'
 import { readSheet } from 'read-excel-file/browser'
 import { LEAD_PHONE_HELP_TEXT, parseLeadPhoneForStorage } from '@/lib/phone'
 import { LEAD_DISPOSITIONS } from '@/lib/lead-workflow'
+import { isTotallyUnassignedLead } from '@/lib/lead-assignment'
 
 type Employee = { id: string; name: string; email: string }
 type Lead = {
@@ -59,6 +60,8 @@ export default function AdminLeadsPage() {
   const [showSelectedOnly, setShowSelectedOnly] = useState(false)
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const fetchSeqRef = useRef(0)
+  const pausePollRef = useRef(false)
 
   const toRecordRows = async (file: File): Promise<Record<string, unknown>[]> => {
     const lowerName = file.name.toLowerCase()
@@ -87,24 +90,29 @@ export default function AdminLeadsPage() {
   }
 
   const fetchData = async () => {
+    const seq = ++fetchSeqRef.current
     try {
       const [leadsRes, empRes] = await Promise.all([
-        fetch('/api/admin/leads'),
-        fetch('/api/admin/employees'),
+        fetch('/api/admin/leads', { cache: 'no-store' }),
+        fetch('/api/admin/employees', { cache: 'no-store' }),
       ])
+      if (seq !== fetchSeqRef.current) return
       const leadsData = await leadsRes.json()
       const empData = await empRes.json()
 
       if (leadsData.leads) setLeads(leadsData.leads)
       if (empData.employees) setEmployees(empData.employees)
     } finally {
-      setLoading(false)
+      if (seq === fetchSeqRef.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
+    void fetchData()
+    const interval = setInterval(() => {
+      if (pausePollRef.current) return
+      void fetchData()
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -229,23 +237,47 @@ export default function AdminLeadsPage() {
 
   const handleAssign = async () => {
     if (selectedLeads.size === 0 || !selectedEmployeeId || assigning) return
+    const ids = Array.from(selectedLeads)
+    const employee = employees.find((e) => e.id === selectedEmployeeId)
     setAssigning(true)
+    pausePollRef.current = true
+    setLeads((prev) =>
+      prev.map((l) =>
+        ids.includes(l.id)
+          ? {
+              ...l,
+              assignedToId: selectedEmployeeId,
+              assignedTo: employee ? { name: employee.name } : l.assignedTo,
+            }
+          : l
+      )
+    )
     try {
       const res = await fetch('/api/admin/leads', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadIds: Array.from(selectedLeads), assignedToId: selectedEmployeeId })
+        body: JSON.stringify({ leadIds: ids, assignedToId: selectedEmployeeId }),
       })
       const payload = await res.json().catch(() => ({}))
       if (res.ok) {
         setSelectedLeads(new Set())
-        fetchData()
-        setNotification({ message: `Leads assigned successfully (${payload.updatedCount ?? selectedLeads.size})`, type: 'success' })
+        await fetchData()
+        setNotification({
+          message: `Assigned ${payload.updatedCount ?? ids.length} lead(s) to ${payload.assignedToName ?? employee?.name ?? 'employee'}`,
+          type: 'success',
+        })
       } else {
+        await fetchData()
         setNotification({ message: payload.error || 'Failed to assign leads', type: 'warn' })
       }
-    } catch (e) { console.error(e) }
-    finally { setAssigning(false) }
+    } catch (e) {
+      console.error(e)
+      await fetchData()
+      setNotification({ message: 'Failed to assign leads', type: 'warn' })
+    } finally {
+      pausePollRef.current = false
+      setAssigning(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -286,15 +318,17 @@ export default function AdminLeadsPage() {
     const count = Number(commonQty)
     if (isNaN(count) || count <= 0) return
     
-    // Prioritize leads completely unassigned to any employee
-    const unassigned = filteredLeads.filter(l => !l.assignedToId || l.assignedToId === "")
-    const toSelect = unassigned.slice(0, count).map(l => l.id)
-    
+    const unassignedOnly = filteredLeads.filter(isTotallyUnassignedLead)
+    const toSelect = unassignedOnly.slice(0, count).map((l) => l.id)
+
     setSelectedLeads(new Set(toSelect))
     setCommonQty('')
-    setNotification({ 
-      message: toSelect.length > 0 ? `Selected ${toSelect.length} unassigned leads` : 'No unassigned leads found', 
-      type: toSelect.length > 0 ? 'success' : 'warn' 
+    setNotification({
+      message:
+        toSelect.length > 0
+          ? `Selected ${toSelect.length} unassigned lead(s)`
+          : 'No unassigned leads in this list — clear filters or import fresh data',
+      type: toSelect.length > 0 ? 'success' : 'warn',
     })
   }
 

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
 import { parseLeadPhoneForStorage } from '@/lib/phone'
+import { employeeAssignUpdate } from '@/lib/lead-assignment'
 import { getJwtSecret } from '@/lib/jwt-secret'
 
 const secret = getJwtSecret()
@@ -30,7 +31,9 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ leads })
+    const response = NextResponse.json({ leads })
+    response.headers.set('Cache-Control', 'no-store')
+    return response
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
@@ -145,34 +148,38 @@ export async function PUT(req: NextRequest) {
 
     const normalizedLeadIds = uniqStrings(leadIds)
     if (normalizedLeadIds.length === 0) {
-       return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+      return NextResponse.json({ error: 'Select at least one lead.' }, { status: 400 })
     }
 
-    if (assignedToId) {
-      const employee = await db.user.findUnique({
-        where: { id: assignedToId },
-        select: { id: true, role: true },
-      })
-      if (!employee || employee.role !== 'EMPLOYEE') {
-        return NextResponse.json({ error: 'Invalid employee selection' }, { status: 400 })
-      }
+    const targetId =
+      typeof assignedToId === 'string' && assignedToId.trim() !== ''
+        ? assignedToId.trim()
+        : null
+
+    if (!targetId) {
+      return NextResponse.json({ error: 'Select an employee to assign leads.' }, { status: 400 })
     }
 
-    const updateData: {
-      assignedToId?: string | null
-      assignedDate?: Date
-    } = {}
-    if (assignedToId !== undefined) {
-      updateData.assignedToId = assignedToId === '' ? null : assignedToId
-      updateData.assignedDate = new Date()
+    const employee = await db.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, role: true, name: true },
+    })
+    if (!employee || employee.role !== 'EMPLOYEE') {
+      return NextResponse.json({ error: 'Invalid employee selection' }, { status: 400 })
     }
 
+    // Only set owner + date — never clear assignment or reset disposition/intake on assign/transfer.
     const updated = await db.lead.updateMany({
       where: { id: { in: normalizedLeadIds } },
-      data: updateData,
+      data: employeeAssignUpdate(employee.id),
     })
 
-    return NextResponse.json({ success: true, updatedCount: updated.count })
+    return NextResponse.json({
+      success: true,
+      updatedCount: updated.count,
+      assignedToId: employee.id,
+      assignedToName: employee.name,
+    })
   } catch (error) {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }

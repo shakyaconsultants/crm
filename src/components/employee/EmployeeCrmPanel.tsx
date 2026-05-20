@@ -136,8 +136,8 @@ export default function EmployeeCrmPanel() {
   const fetchData = async () => {
     try {
       const [leadsRes, advRes] = await Promise.all([
-        fetch('/api/employee/leads'),
-        fetch('/api/employee/advisors'),
+        fetch('/api/employee/leads', { cache: 'no-store' }),
+        fetch('/api/employee/advisors', { cache: 'no-store' }),
       ])
       const leadsData = await leadsRes.json()
       const advData = await advRes.json()

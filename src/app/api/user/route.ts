@@ -3,19 +3,22 @@ import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { db } from '@/lib/db'
 import { employeeHasCrmAccess, type AppJwtClaims } from '@/lib/employee-jwt'
+import { CRM_SESSION_COOKIE } from '@/lib/employee-crm-session'
 import { getJwtSecret } from '@/lib/jwt-secret'
 
 const secret = getJwtSecret()
 
 export async function GET(req: NextRequest) {
+  const crmJwt = req.cookies.get(CRM_SESSION_COOKIE)?.value
   const token = req.cookies.get('token')?.value
+  const jwt = crmJwt ?? token
 
-  if (!token) {
+  if (!jwt) {
     return NextResponse.json({ user: null }, { status: 401 })
   }
 
   try {
-    const { payload } = await jwtVerify(token, secret)
+    const { payload } = await jwtVerify(jwt, secret)
     const p = payload as AppJwtClaims
     const user = await db.user.findUnique({
       where: { id: payload.id as string },

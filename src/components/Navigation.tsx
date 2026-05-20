@@ -51,9 +51,16 @@ export default function Navigation() {
     return () => window.removeEventListener('gdf:user-updated', load)
   }, [])
 
+  const logoutScope: 'hub' | 'crm' = isEmployeeCrm ? 'crm' : 'hub'
+
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: logoutScope }),
+    })
+    setMobileOpen(false)
+    router.push(logoutScope === 'crm' ? '/crm-access' : '/login')
   }
 
   return (
@@ -155,7 +162,7 @@ export default function Navigation() {
             <button
               onClick={handleLogout}
               className="text-neutral-400 hover:text-red-400 transition-colors p-2"
-              title="Logout"
+              title={logoutScope === 'crm' ? 'Log out of CRM' : 'Log out'}
             >
               <LogOut className="w-5 h-5" />
             </button>
@@ -180,7 +187,7 @@ export default function Navigation() {
               <p className="text-xs text-neutral-500">{user?.role}</p>
             </div>
             <button onClick={handleLogout} className="text-neutral-400 hover:text-red-400 text-sm flex items-center gap-2">
-              <LogOut className="w-4 h-4" /> Logout
+              <LogOut className="w-4 h-4" /> {logoutScope === 'crm' ? 'Log out of CRM' : 'Log out'}
             </button>
           </div>
           {isAdminContext && (

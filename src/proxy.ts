@@ -1,12 +1,30 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
+import { employeeHasCrmAccess, type AppJwtClaims } from '@/lib/employee-jwt'
+import {
+  CRM_SESSION_COOKIE,
+  isCrmSessionPayload,
+} from '@/lib/employee-crm-session'
 import { getJwtSecret } from '@/lib/jwt-secret'
 
 const secret = getJwtSecret()
 
+async function verifyCookieJwt(
+  value: string | undefined
+): Promise<AppJwtClaims | null> {
+  if (!value) return null
+  try {
+    const { payload } = await jwtVerify(value, secret)
+    return payload as AppJwtClaims
+  } catch {
+    return null
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get('token')?.value
+  const crmSession = request.cookies.get(CRM_SESSION_COOKIE)?.value
 
   const adminOtpConfigured = !!(process.env.ADMIN_EMAIL ?? '').trim()
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
@@ -15,64 +33,83 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname === '/' ||
     request.nextUrl.pathname.startsWith('/crm-access')
 
-  if (!token) {
+  const isCrmPath =
+    request.nextUrl.pathname === '/employee/crm' ||
+    request.nextUrl.pathname.startsWith('/employee/crm/')
+
+  const crmPayload = await verifyCookieJwt(crmSession)
+  const hubPayload = await verifyCookieJwt(token)
+  const hasCrmSession = crmPayload !== null && isCrmSessionPayload(crmPayload)
+
+  if (isCrmPath) {
+    if (hasCrmSession) return NextResponse.next()
+    if (
+      hubPayload?.role === 'EMPLOYEE' &&
+      (!adminOtpConfigured || employeeHasCrmAccess(hubPayload))
+    ) {
+      return NextResponse.next()
+    }
+    return NextResponse.redirect(new URL('/crm-access', request.url))
+  }
+
+  if (!token && !crmSession) {
     if (!isPublicPage) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
     return NextResponse.next()
   }
 
-  try {
-    const { payload } = await jwtVerify(token, secret)
-    const role = payload.role as string
-    const crmClaim =
-      typeof (payload as { crm?: unknown }).crm === 'boolean'
-        ? (payload as { crm: boolean }).crm
-        : false
-
-    if (isPublicPage) {
-      // Marketing site + CRM access stay reachable while logged in (logo / back links)
-      if (
-        request.nextUrl.pathname === '/' ||
-        request.nextUrl.pathname.startsWith('/crm-access')
-      ) {
-        return NextResponse.next()
-      }
-      if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url))
-      if (role === 'ADVISOR') return NextResponse.redirect(new URL('/advisor', request.url))
-      if (role === 'CASE_ASSESSOR') return NextResponse.redirect(new URL('/case-assessor', request.url))
-      return NextResponse.redirect(new URL('/employee', request.url))
-    }
-
-    if (request.nextUrl.pathname.startsWith('/admin') && role !== 'ADMIN') {
-      return NextResponse.redirect(new URL('/employee', request.url))
-    }
-
-    const isEmployeeZone =
-      request.nextUrl.pathname.startsWith('/employee') || request.nextUrl.pathname === '/employee'
-    if (isEmployeeZone && role !== 'EMPLOYEE') {
-      return NextResponse.redirect(new URL('/admin', request.url))
-    }
-
-    const isCrmPath =
-      request.nextUrl.pathname === '/employee/crm' ||
-      request.nextUrl.pathname.startsWith('/employee/crm/')
-    if (isCrmPath && role === 'EMPLOYEE' && adminOtpConfigured && crmClaim !== true) {
-      const u = request.nextUrl.clone()
-      u.pathname = '/employee'
-      u.searchParams.set('crm_locked', '1')
-      return NextResponse.redirect(u)
-    }
-
-    return NextResponse.next()
-  } catch {
-    if (!isAuthPage) {
+  const payload = hubPayload ?? (hasCrmSession ? crmPayload : null)
+  if (!payload) {
+    if (!isPublicPage) {
       const response = NextResponse.redirect(new URL('/login', request.url))
       response.cookies.delete('token')
+      response.cookies.delete(CRM_SESSION_COOKIE)
       return response
     }
     return NextResponse.next()
   }
+
+  const role = payload.role as string
+
+  if (isPublicPage) {
+    if (
+      request.nextUrl.pathname === '/' ||
+      request.nextUrl.pathname.startsWith('/crm-access')
+    ) {
+      return NextResponse.next()
+    }
+    if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url))
+    if (role === 'ADVISOR') return NextResponse.redirect(new URL('/advisor', request.url))
+    if (role === 'CASE_ASSESSOR') {
+      return NextResponse.redirect(new URL('/case-assessor', request.url))
+    }
+    if (hasCrmSession) {
+      return NextResponse.redirect(new URL('/employee/crm', request.url))
+    }
+    return NextResponse.redirect(new URL('/employee', request.url))
+  }
+
+  if (request.nextUrl.pathname.startsWith('/admin') && role !== 'ADMIN') {
+    if (hasCrmSession) {
+      return NextResponse.redirect(new URL('/employee/crm', request.url))
+    }
+    return NextResponse.redirect(new URL('/employee', request.url))
+  }
+
+  const isEmployeeZone =
+    request.nextUrl.pathname.startsWith('/employee') ||
+    request.nextUrl.pathname === '/employee'
+
+  if (isEmployeeZone && role !== 'EMPLOYEE') {
+    return NextResponse.redirect(new URL('/admin', request.url))
+  }
+
+  if (isEmployeeZone && role === 'EMPLOYEE' && !hubPayload && hasCrmSession) {
+    return NextResponse.redirect(new URL('/employee/crm', request.url))
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {

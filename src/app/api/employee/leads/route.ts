@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
       orderBy: { assignedDate: 'desc' },
     })
 
-    return NextResponse.json({ leads })
+    const response = NextResponse.json({ leads })
+    response.headers.set('Cache-Control', 'no-store')
+    return response
   } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
