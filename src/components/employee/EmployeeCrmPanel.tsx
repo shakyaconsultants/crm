@@ -24,6 +24,17 @@ import {
   type EmployeeIntakeForm,
 } from '@/lib/employee-intake-form'
 import { LEAD_DISPOSITIONS } from '@/lib/lead-workflow'
+import { format, formatDistanceToNow } from 'date-fns'
+
+function formatLeadUpdated(iso: string | null | undefined) {
+  if (!iso) return { relative: '—', full: '' }
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return { relative: '—', full: '' }
+  return {
+    relative: formatDistanceToNow(d, { addSuffix: true }),
+    full: format(d, 'dd MMM yyyy, HH:mm'),
+  }
+}
 
 type AdvisorOption = { id: string; name: string }
 
@@ -214,7 +225,11 @@ export default function EmployeeCrmPanel() {
 
   const updateLead = async (id: string, updates: Partial<Lead>, immediate = false) => {
     setSavingId(id)
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l))
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === id ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
+      )
+    )
     
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
 
@@ -379,48 +394,55 @@ export default function EmployeeCrmPanel() {
           })}
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col bg-neutral-900/50 border border-neutral-800 rounded-2xl backdrop-blur-sm shadow-xl">
-          <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 flex flex-col bg-neutral-900/50 border border-neutral-800 rounded-2xl backdrop-blur-sm shadow-xl overflow-hidden">
+          <div className="shrink-0 px-4 py-2 border-b border-neutral-800/80 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
+            <span>{filteredLeads.length} lead{filteredLeads.length === 1 ? '' : 's'} · scroll horizontally for all columns</span>
+            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" aria-hidden />}
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto overscroll-x-contain">
             <table className="min-w-max w-full text-left border-collapse text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b border-neutral-800 bg-neutral-900 text-xs uppercase tracking-wider text-neutral-400">
-                  <th className="p-4 w-10"></th>
-                  <th className="p-4 font-medium">Title</th>
-                  <th className="p-4 font-medium">First Name</th>
-                  <th className="p-4 font-medium">Last Name</th>
-                  <th className="p-4 font-medium">Address</th>
-                  <th className="p-4 font-medium">Post Code</th>
-                  <th className="p-4 font-medium">Phone Number</th>
-                  <th className="p-4 font-medium">Email</th>
-                  <th className="p-4 font-medium">Disposition</th>
-                  <th className="p-4 font-medium">Callback</th>
-                  <th className="p-4 font-medium text-center">Intake form</th>
-                  <th className="p-4 font-medium text-center">Send to Advisor</th>
+              <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_rgb(38,38,38)]">
+                <tr className="border-b border-neutral-800 bg-neutral-900 text-[10px] uppercase tracking-wider text-neutral-400">
+                  <th className="p-3 w-10 sticky left-0 z-20 bg-neutral-900"></th>
+                  <th className="p-3 font-medium whitespace-nowrap">Title</th>
+                  <th className="p-3 font-medium whitespace-nowrap">First name</th>
+                  <th className="p-3 font-medium whitespace-nowrap">Last name</th>
+                  <th className="p-3 font-medium min-w-[10rem]">Address</th>
+                  <th className="p-3 font-medium whitespace-nowrap">Post code</th>
+                  <th className="p-3 font-medium whitespace-nowrap">Phone</th>
+                  <th className="p-3 font-medium whitespace-nowrap">Email</th>
+                  <th className="p-3 font-medium min-w-[9rem]">Disposition</th>
+                  <th className="p-3 font-medium whitespace-nowrap min-w-[7rem]">Updated</th>
+                  <th className="p-3 font-medium min-w-[11rem]">Callback</th>
+                  <th className="p-3 font-medium text-center whitespace-nowrap">Intake</th>
+                  <th className="p-3 font-medium min-w-[10rem]">Advisor</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/50">
                 {loading ? (
                    <tr>
-                     <td colSpan={12} className="p-8 text-center text-neutral-500">
+                     <td colSpan={13} className="p-10 text-center text-neutral-500">
                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                         Loading assigned leads...
                      </td>
                    </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-neutral-500">
-                      No leads found.
+                    <td colSpan={13} className="p-10 text-center text-neutral-500">
+                      No leads match your search or filter.
                     </td>
                   </tr>
                 ) : (
-                  paginatedLeads.map(lead => (
+                  paginatedLeads.map(lead => {
+                    const updated = formatLeadUpdated(lead.updatedAt)
+                    return (
                     <motion.tr 
                       key={lead.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className={`hover:bg-neutral-800/30 transition-colors ${expandedId === lead.id ? 'bg-neutral-800/20' : ''}`}
+                      className={`hover:bg-neutral-800/40 transition-colors ${expandedId === lead.id ? 'bg-blue-950/20' : ''}`}
                     >
-                      <td className="p-4 text-center">
+                      <td className="p-3 text-center sticky left-0 z-[1] bg-neutral-900/95">
                         <button
                           type="button"
                           onClick={() =>
@@ -436,16 +458,16 @@ export default function EmployeeCrmPanel() {
                           )}
                         </button>
                       </td>
-                      <td className="p-4 text-neutral-300">{lead.title || '-'}</td>
-                      <td className="p-4 font-medium text-white">{lead.firstName}</td>
-                      <td className="p-4 text-neutral-300">{lead.lastName || '-'}</td>
-                      <td className="p-4 text-neutral-400 min-w-[12rem] max-w-[20rem] whitespace-normal break-words align-top" title={lead.address || ''}>{lead.address || '-'}</td>
-                      <td className="p-4 text-neutral-400">{lead.postCode || '-'}</td>
-                      <td className="p-4 font-mono text-neutral-300">
-                        <a href={`tel:${lead.phone}`} className="hover:text-blue-400 underline decoration-neutral-700 underline-offset-4">{lead.phone}</a>
+                      <td className="p-3 text-neutral-300 whitespace-nowrap">{lead.title || '—'}</td>
+                      <td className="p-3 font-medium text-white whitespace-nowrap">{lead.firstName || '—'}</td>
+                      <td className="p-3 text-neutral-300 whitespace-nowrap">{lead.lastName || '—'}</td>
+                      <td className="p-3 text-neutral-400 min-w-[10rem] max-w-[18rem] whitespace-normal break-words align-top select-text" title={lead.address || ''}>{lead.address || '—'}</td>
+                      <td className="p-3 text-neutral-400 whitespace-nowrap">{lead.postCode || '—'}</td>
+                      <td className="p-3 font-mono text-neutral-300 whitespace-nowrap">
+                        <a href={`tel:${lead.phone}`} className="hover:text-blue-400 underline decoration-neutral-700 underline-offset-4 select-text">{lead.phone}</a>
                       </td>
-                      <td className="p-4 text-neutral-300 normal-case">{lead.email || '-'}</td>
-                      <td className="p-4">
+                      <td className="p-3 text-neutral-300 normal-case max-w-[14rem] truncate select-text" title={lead.email || ''}>{lead.email || '—'}</td>
+                      <td className="p-3 align-top">
                         <select 
                           value={lead.disposition}
                           onChange={(e) => {
@@ -456,12 +478,18 @@ export default function EmployeeCrmPanel() {
                             }
                             updateLead(lead.id, updates, true)
                           }}
-                          className="bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] font-bold text-white focus:outline-none focus:ring-1 focus:ring-blue-500 select-text"
+                          className="w-full min-w-[8.5rem] max-w-[11rem] bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1.5 text-[11px] font-medium text-white focus:outline-none focus:ring-1 focus:ring-blue-500 select-text"
                         >
                           {DISPOSITIONS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </td>
-                      <td className="p-4 min-w-[190px]">
+                      <td className="p-3 align-top whitespace-nowrap select-text" title={updated.full}>
+                        <span className="text-[11px] text-neutral-400 block">{updated.relative}</span>
+                        {updated.full ? (
+                          <span className="text-[10px] text-neutral-600 block mt-0.5">{updated.full}</span>
+                        ) : null}
+                      </td>
+                      <td className="p-3 min-w-[11rem] align-top">
                         {lead.disposition === 'Callback' ? (
                           <div className="flex items-center gap-2">
                             <input
@@ -480,10 +508,10 @@ export default function EmployeeCrmPanel() {
                             />
                           </div>
                         ) : (
-                          <span className="text-[11px] text-neutral-600">Select “Callback” disposition</span>
+                          <span className="text-[10px] text-neutral-600 leading-snug">Set disposition to Callback</span>
                         )}
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-3 text-center align-top">
                         <button
                           type="button"
                           onClick={() =>
@@ -495,7 +523,7 @@ export default function EmployeeCrmPanel() {
                           <ClipboardList className="w-4 h-4 inline" aria-hidden />
                         </button>
                       </td>
-                      <td className="p-4 min-w-[160px]">
+                      <td className="p-3 min-w-[10rem] align-top">
                         <select
                           value={lead.assignedAdvisorId ?? ''}
                           onChange={(e) => {
@@ -509,9 +537,9 @@ export default function EmployeeCrmPanel() {
                               true
                             )
                           }}
-                          className="w-full max-w-[200px] bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-[11px] font-bold text-white focus:outline-none focus:ring-1 focus:ring-amber-500 select-text"
+                          className="w-full min-w-[9rem] bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1.5 text-[11px] font-medium text-white focus:outline-none focus:ring-1 focus:ring-amber-500 select-text"
                         >
-                          <option value="">— Select advisor —</option>
+                          <option value="">— Advisor —</option>
                           {advisors.map((a) => (
                             <option key={a.id} value={a.id}>
                               {a.name}
@@ -520,39 +548,40 @@ export default function EmployeeCrmPanel() {
                         </select>
                       </td>
                     </motion.tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="shrink-0 bg-neutral-900/80 border-t border-neutral-800 p-4 flex items-center justify-between gap-4">
+          <div className="shrink-0 bg-neutral-900/80 border-t border-neutral-800 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="text-xs text-neutral-500">
-                Showing {Math.min(filteredLeads.length, (currentPage - 1) * pageSize + 1)} to {Math.min(filteredLeads.length, currentPage * pageSize)} of {filteredLeads.length} leads
+                {filteredLeads.length === 0
+                  ? 'No leads'
+                  : `Showing ${Math.min(filteredLeads.length, (currentPage - 1) * pageSize + 1)}–${Math.min(filteredLeads.length, currentPage * pageSize)} of ${filteredLeads.length}`}
+                {totalPages > 1 && ` · page ${currentPage} of ${totalPages}`}
               </div>
-              <div className="flex items-center gap-2">
+          {totalPages > 1 && (
+              <div className="flex items-center gap-2 sm:ml-auto">
                 <button
                   disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded text-xs transition-colors border border-neutral-700 font-bold text-white"
+                  onClick={() => setCurrentPage((prev) => prev - 1)}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded-md text-xs transition-colors border border-neutral-700 font-medium text-white"
                 >
-                   Prev
+                  Prev
                 </button>
-                <div className="flex bg-neutral-950 p-1 rounded-lg border border-neutral-800">
-                  <span className="px-3 py-1 text-xs font-bold text-blue-400">Page {currentPage} of {totalPages}</span>
-                </div>
                 <button
                   disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded text-xs transition-colors border border-neutral-700 font-bold text-white"
+                  onClick={() => setCurrentPage((prev) => prev + 1)}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-30 rounded-md text-xs transition-colors border border-neutral-700 font-medium text-white"
                 >
                   Next
                 </button>
               </div>
-            </div>
           )}
+          </div>
         </div>
 
         {/* Employee intake modal */}
